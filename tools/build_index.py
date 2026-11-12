@@ -29,6 +29,9 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gametdb  # noqa: E402
+
 METADATA_URL = "https://gamesdb.launchbox-app.com/Metadata.zip"
 
 # Nombre de plataforma en LaunchBox (normalizado) -> clave de Ludoteca
@@ -113,17 +116,18 @@ def year_of(g):
     return int(y) if y.isdigit() else None
 
 
-def pick(images, types):
-    """Mejor imagen de entre los tipos dados, por orden de tipo y región."""
+def pick(images, types, prefer_region=None):
+    """Mejor imagen de entre los tipos dados. Si se indica una región (la de
+    la portada elegida), se prefiere esa misma región para que portada,
+    contraportada y cartucho/disco sean de la misma edición."""
     best = None
     for ti, t in enumerate(types):
         for img in images.get(t, []):
-            key = (region_rank(img[1]), ti)
+            same = 0 if (prefer_region is not None and (img[1] or "").lower() == prefer_region) else 1
+            key = (same, region_rank(img[1]), ti)
             if best is None or key < best[0]:
-                best = (key, img[0])
-        if best is not None:
-            return best[1]
-    return None
+                best = (key, img)
+    return best[1] if best else None
 
 
 def main():
@@ -133,6 +137,8 @@ def main():
     ap.add_argument("--out", default=os.path.join("site", "data"))
     ap.add_argument("--cache", default=".cache")
     ap.add_argument("--img-base", help="solo para pruebas: carpeta local de imágenes")
+    ap.add_argument("--tdb-dir", help="solo para pruebas: carpeta con gametdb-<plat>.xml")
+    ap.add_argument("--no-tdb", action="store_true", help="no usar GameTDB")
     args = ap.parse_args()
 
     opener = open_xml(args)
@@ -173,12 +179,36 @@ def main():
         front = pick(g["images"], FRONT_TYPES)
         if not front:
             continue  # sin portada no nos sirve para la estantería
-        row = [gid, g["name"], g["year"], front,
-               pick(g["images"], BACK_TYPES), pick(g["images"], MEDIA_TYPES)]
+        region = (front[1] or "").lower()
+        back = pick(g["images"], BACK_TYPES, region)
+        media = pick(g["images"], MEDIA_TYPES, region)
+        row = [gid, g["name"], g["year"], front[0],
+               back[0] if back else None, media[0] if media else None]
         alts = sorted(g["alts"])[:6]
         if alts:
             row.append(alts)
         per_plat[g["plat"]].append(row)
+
+    # DS, 3DS y Switch: GameTDB (títulos en español, edición española/europea).
+    # Los juegos de LaunchBox que no estén en GameTDB se conservan.
+    sources = {}
+    for plat in ("ds", "3ds", "switch"):
+        sources[plat] = "launchbox"
+        if args.no_tdb:
+            continue
+        tdb_rows = gametdb.load(plat, cache=args.cache, local_dir=args.tdb_dir)
+        if not tdb_rows:
+            print(f"  {plat}: GameTDB no disponible, uso solo LaunchBox", file=sys.stderr)
+            continue
+        known = set()
+        for r in tdb_rows:
+            known.add(gametdb.norm(r[1]))
+            for a in r[6]:
+                known.add(gametdb.norm(a))
+        extra = [r for r in per_plat[plat] if gametdb.norm(r[1]) not in known]
+        per_plat[plat] = tdb_rows + extra
+        sources[plat] = f"gametdb+launchbox ({len(tdb_rows)} + {len(extra)})"
+        print(f"  {plat}: {len(tdb_rows)} de GameTDB + {len(extra)} solo en LaunchBox", file=sys.stderr)
 
     summary = {}
     for plat, rows in per_plat.items():
@@ -191,7 +221,7 @@ def main():
         print(f"  {plat}: {len(rows)} juegos con portada -> {path}", file=sys.stderr)
 
     with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as fh:
-        meta = {"updated": stamp, "counts": summary}
+        meta = {"updated": stamp, "counts": summary, "sources": sources}
         if args.img_base:
             meta["imgBase"] = args.img_base
         json.dump(meta, fh)

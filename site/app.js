@@ -4,14 +4,14 @@
 (function () {
   // ---------- Plataformas y colecciones ----------
   const PLAT = {
-    ds:      { label: 'NINTENDO DS',       short: 'DS',       coll: 'nin', caseColor: '#1d1d1f', bandText: '#f2f2f2', w: 96,  h: 106, sw: 15, media: 'cart' },
-    '3ds':   { label: 'NINTENDO 3DS',      short: '3DS',      coll: 'nin', caseColor: '#ececec', bandText: '#a3121c', w: 96,  h: 106, sw: 15, media: 'cart' },
-    switch:  { label: 'NINTENDO SWITCH',   short: 'Switch',   coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, media: 'cart' },
-    switch2: { label: 'NINTENDO SWITCH 2', short: 'Switch 2', coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, media: 'cart' },
-    ps4:     { label: 'PS4',               short: 'PS4',      coll: 'ps',  caseColor: '#1a3f8f', bandText: '#ffffff', w: 100, h: 124, sw: 16, media: 'disc' },
-    ps5:     { label: 'PS5',               short: 'PS5',      coll: 'ps',  caseColor: '#f3f3f3', bandText: '#111111', w: 100, h: 124, sw: 16, media: 'disc' },
-    dvd:     { label: 'DVD',               short: 'DVD',      coll: 'mov', caseColor: '#141414', bandText: '#dddddd', w: 90,  h: 128, sw: 15, media: 'disc' },
-    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 98,  h: 120, sw: 13, media: 'disc' }
+    ds:      { label: 'NINTENDO DS',       short: 'DS',       coll: 'nin', caseColor: '#1d1d1f', bandText: '#f2f2f2', w: 96,  h: 106, sw: 15, depth: 0.12, media: 'cart' },
+    '3ds':   { label: 'NINTENDO 3DS',      short: '3DS',      coll: 'nin', caseColor: '#ececec', bandText: '#a3121c', w: 96,  h: 106, sw: 15, depth: 0.12, media: 'cart' },
+    switch:  { label: 'NINTENDO SWITCH',   short: 'Switch',   coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, depth: 0.1, media: 'cart' },
+    switch2: { label: 'NINTENDO SWITCH 2', short: 'Switch 2', coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, depth: 0.1, media: 'cart' },
+    ps4:     { label: 'PS4',               short: 'PS4',      coll: 'ps',  caseColor: '#1a3f8f', bandText: '#ffffff', w: 100, h: 124, sw: 16, depth: 0.1, media: 'disc' },
+    ps5:     { label: 'PS5',               short: 'PS5',      coll: 'ps',  caseColor: '#2257b8', bandText: '#ffffff', w: 100, h: 124, sw: 16, depth: 0.1, media: 'disc' },
+    dvd:     { label: 'DVD',               short: 'DVD',      coll: 'mov', caseColor: '#141414', bandText: '#dddddd', w: 90,  h: 128, sw: 15, depth: 0.1, media: 'disc' },
+    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 98,  h: 120, sw: 13, depth: 0.09, media: 'disc' }
   };
   const COLLS = [
     { id: 'nin', name: 'DS · 3DS',    full: 'Nintendo DS y 3DS',          plats: ['ds', '3ds'],         noun: ['juego', 'juegos'] },
@@ -20,7 +20,10 @@
     { id: 'mov', name: 'Películas',   full: 'DVD y Blu-ray',              plats: ['dvd', 'bluray'],     noun: ['película', 'películas'] }
   ];
   const collOf = (id) => COLLS.find((c) => c.id === id) || COLLS[1];
-  const ALLOWED_IMG = ['https://images.launchbox-app.com/', 'https://upload.wikimedia.org/'];
+  const ALLOWED_IMG = ['https://images.launchbox-app.com/', 'https://upload.wikimedia.org/', 'https://art.gametdb.com/', 'https://image.tmdb.org/'];
+  // Clave gratuita de TMDB (uso personal, no comercial). Es la misma para todos.
+  const TMDB_KEY = '7ae1e6e55398db1b1c344538507ad7e1';
+  const REGION_NAME = { ES: 'España', EU: 'Europa', WW: 'Internacional', US: 'EE. UU.', JP: 'Japón', DE: 'Alemania', FR: 'Francia', IT: 'Italia', NL: 'Países Bajos', AU: 'Australia', KR: 'Corea' };
   let IMG_BASE = 'https://images.launchbox-app.com/';
   let CATALOG_DATE = '';
 
@@ -149,7 +152,12 @@
     return rows;
   }
 
+  // La portada completa de GameTDB es contraportada | lomo | portada
+  function fullPart(it, pos) {
+    return `<div class="full-part" style="background-image:url('${cssUrl(it.full)}');background-position:${pos} 0"></div>`;
+  }
   function coverInner(it) {
+    if (!it.front && it.full) return fullPart(it, '100%');
     return it.front
       ? `<img src="${esc(it.front)}" alt="" loading="lazy" decoding="async">`
       : `<div style="position:absolute;inset:0;display:flex;align-items:flex-end;padding:8px;background:${colorFor(it.title)};font:800 11px/1.05 var(--serif);color:#fff">${esc(it.title)}</div>`;
@@ -161,10 +169,10 @@
     if (it.face) {
       return `<button class="item front" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}">
         <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor}">
-          <div class="band" style="color:${p.bandText}">${p.label}</div>
           <div class="cover">${coverInner(it)}</div></div></button>`;
     }
-    const art = it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
+    const art = it.full ? `background-image:url('${cssUrl(it.full)}');background-size:auto 100%;background-position:50% 0`
+      : it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
     return `<button class="item spine" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">
       <div class="body" style="width:${p.sw}px;height:${p.h}px;background:${p.caseColor}">
         <div style="height:14px;flex:none"></div><div class="art" style="${art}"><span>${esc(it.title)}</span></div><div style="height:16px;flex:none"></div>
@@ -209,37 +217,89 @@
     }).join('')}<p class="hint" style="text-align:center">Para ver sus novedades, pídeles que te vuelvan a mandar su enlace.</p></div>`;
   }
 
-  // ---------- Detalle de una caja ----------
+  // ---------- Detalle de una caja (v2: caja física en 3D) ----------
   function ownedSame(it) {
     return state.items.find((m) => m.kind === it.kind && m.plat === it.plat && String(m.ref) === String(it.ref));
   }
 
-  function genBack(it, p) {
-    const bg = it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
-    return `<div class="gen-back"><div class="blur" style="${bg}"></div>
-      <div class="t">${esc(it.title)}</div><div class="m">${esc(p.short)}${it.year ? ' · ' + esc(it.year) : ''}</div>
-      <div class="thumbs"><div style="${bg};background-position:20% 30%"></div><div style="${bg};background-position:80% 70%"></div></div>
-      <div class="grow"></div><div class="foot"><div class="m">${it.kind === 'movie' ? 'Película' : 'Videojuego'}</div><div class="barcode" aria-hidden="true"></div></div></div>`;
+  const PRESET = { front: { x: 4, y: 18 }, back: { x: 4, y: 198 } };
+  const fx = { rx: 4, ry: -16, tx: 0, ty: 0, drag: null, raf: 0, moved: false };
+
+  function artBg(it) {
+    if (it.full) return `background-image:url('${cssUrl(it.full)}');background-size:auto 100%;background-position:50% 0`;
+    return it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
+  }
+
+  function face(cls, w, h, t, inner, extra) {
+    return `<div class="bf ${cls}" style="width:${w}px;height:${h}px;left:${-w / 2}px;top:${-h / 2}px;transform:${t};${extra || ''}">${inner}</div>`;
+  }
+
+  function plainBack(p) {
+    return `<div class="plain-back"><div class="pb-mold"></div><div class="pb-note">Contraportada no disponible en el catálogo</div></div>`;
+  }
+
+  function genericDisc(it, p, size) {
+    return `<div class="gdisc" style="width:${size}px;height:${size}px" role="img" aria-label="Disco">
+      <span class="gd-t">${esc(it.title)}</span><span class="gd-p">${esc(p.short)}</span><i class="gd-hole"></i></div>`;
+  }
+  function discEl(it, p, size) {
+    if (it.media) return `<img class="disc-img" src="${esc(it.media)}" alt="Disco de ${esc(it.title)}" style="width:${size}px;height:${size}px">`;
+    return genericDisc(it, p, size);
+  }
+  function cartEl(it, p, w, h) {
+    if (it.media) return `<img class="cart-img" src="${esc(it.media)}" alt="Cartucho de ${esc(it.title)}" style="max-width:${w}px;max-height:${h}px">`;
+    return `<div class="gcart" style="width:${w}px;height:${h}px" role="img" aria-label="Cartucho"><div class="gc-lab"><span>${esc(it.title)}</span></div></div>`;
+  }
+  const tabs2 = (side) => `<i class="clip ${side} t1"></i><i class="clip ${side} t2"></i>`;
+
+  // Interior según el tipo de caja
+  function insideParts(it, p, W, H) {
+    let lid = ''; let tray = '';
+    if (p.coll === 'sw') {
+      // Switch: el cartucho va en su hueco en la cara interior de la tapa
+      const cw = Math.round(W * 0.36); const ch = Math.round(cw * 1.22);
+      lid = `<div class="well" style="width:${cw + 16}px;height:${ch + 16}px;top:${Math.round(H * 0.16)}px">${cartEl(it, p, cw, ch)}</div>`;
+      tray = tabs2('l');
+    } else if (p.media === 'cart') {
+      // DS / 3DS: manual sujeto a la izquierda, cartucho en su ranura a la derecha
+      const cw = Math.round(W * 0.42); const ch = Math.round(cw * (p.coll === 'nin' ? 1.08 : 1.2));
+      lid = tabs2('r');
+      tray = `<div class="well" style="width:${cw + 16}px;height:${ch + 16}px;top:${Math.round(H * 0.14)}px">${cartEl(it, p, cw, ch)}</div>`;
+    } else {
+      // PlayStation, DVD y Blu-ray: pestañas para el libreto y disco en el eje
+      const ds = Math.round(Math.min(W * 0.88, H * 0.7));
+      lid = tabs2('r');
+      tray = `<div class="hub-ring" style="width:${ds + 10}px;height:${ds + 10}px"></div><div class="hub-disc">${discEl(it, p, ds)}</div><i class="hub"></i>`;
+    }
+    return { lid, tray };
   }
 
   function detailHTML() {
     const d = state.detail; const it = d.item; const p = PLAT[it.plat];
     const vw = Math.min(window.innerWidth, 560); const vh = window.innerHeight;
-    const s = Math.min((vh * 0.5) / p.h, (vw * 0.74) / p.w);
-    const W = Math.round(p.w * s); const H = Math.round(p.h * s);
-    const frontArt = it.front ? `<img src="${esc(it.front)}" alt="Portada de ${esc(it.title)}">` : coverInner(it);
-    const backArt = it.back ? `<img src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}">` : genBack(it, p);
-    let media;
-    if (it.media) media = `<img class="media-img" src="${esc(it.media)}" alt="${p.media === 'disc' ? 'Disco' : 'Cartucho'}">`;
-    else if (p.media === 'disc') media = `<div class="disc" style="${it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`}" role="img" aria-label="Disco"></div>`;
-    else media = `<div class="cart" role="img" aria-label="Cartucho"><div class="label" style="${it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`}"></div><div class="pins"></div></div>`;
-    const IW = Math.min(vw - 32, 400); const IH = Math.round(Math.min(vh * 0.42, IW * 0.82));
+    const s = Math.min((vh * 0.46) / p.h, (vw * 0.66) / p.w);
+    const W = Math.round(p.w * s); const H = Math.round(p.h * s); const D = Math.max(8, Math.round(W * p.depth));
+    const rim = Math.max(3, Math.round(W * 0.025));
+    const caseVar = `--case:${p.caseColor};--rim:${rim}px`;
+    const frontInner = (it.front ? `<img class="art" src="${esc(it.front)}" alt="Portada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '100%') : `<div class="art noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`) + '<i class="gloss"></i>';
+    const backInner = (it.back ? `<img class="art" src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '0%') : plainBack(p)) + '<i class="gloss"></i>';
+    const spineInner = `<div class="sp-art" style="${artBg(it)}"></div><span class="sp-t">${esc(it.title)}</span>`;
+    const box = [
+      face('bf-front', W, H, `translateZ(${D / 2}px)`, frontInner),
+      face('bf-back', W, H, `rotateY(180deg) translateZ(${D / 2}px)`, backInner),
+      face('bf-spine', D, H, `rotateY(-90deg) translateZ(${W / 2}px)`, spineInner),
+      face('bf-edge', D, H, `rotateY(90deg) translateZ(${W / 2}px)`, ''),
+      face('bf-cap', W, D, `rotateX(90deg) translateZ(${H / 2}px)`, ''),
+      face('bf-cap', W, D, `rotateX(-90deg) translateZ(${H / 2}px)`, '')
+    ].join('');
+
+    const parts = insideParts(it, p, W, H);
+    const sc = Math.min(1, (vw - 28) / (2 * W));
     const views = [['front', 'Portada'], ['back', 'Contraportada'], ['inside', 'Por dentro']];
 
     let actions;
     if (d.readOnly) {
-      const mine = ownedSame(it);
-      actions = mine
+      actions = ownedSame(it)
         ? `<div class="row"><button class="btn btn-ghost" disabled>Tú también lo tienes</button></div>`
         : `<div class="row"><button class="btn btn-amber" data-act="copyToMine">${I.plus}Lo tengo yo también</button></div>`;
     } else {
@@ -252,35 +312,138 @@
         <span class="chip" style="background:${p.caseColor};color:${p.bandText}">${p.label}</span>
         <h2>${esc(it.title)}${it.year ? ` <span style="font-weight:600;font-size:16px;color:var(--soft)">${esc(it.year)}</span>` : ''}</h2></div>
         <button class="icon-btn" data-act="closeLayer" aria-label="Devolver a la estantería">${I.close}</button></div>
-      <div class="stage">
-        <div class="card3d ${d.view === 'back' ? 'flipped' : ''} ${d.view === 'inside' ? 'hidden' : ''}" id="card3d" style="width:${W}px;height:${H}px">
-          <div class="face" style="background:${p.caseColor}"><div class="band" style="color:${p.bandText}">${p.label}</div><div class="art">${frontArt}</div></div>
-          <div class="face back" style="background:${p.caseColor}"><div class="art">${backArt}</div><div class="band" style="color:${p.bandText};height:22px;line-height:22px;font-size:10px">${p.label}</div></div>
+      <div class="stage" id="stage" style="${caseVar}">
+        <div class="scene ${d.view === 'inside' ? 'hidden' : ''}" id="scene">
+          <div class="floor" style="width:${Math.round(W * 1.1)}px;top:${Math.round(H / 2 + 8)}px;left:${-Math.round(W * 0.55)}px"></div>
+          <div class="box anim" id="box">${box}</div>
         </div>
-        <div class="inside ${d.view === 'inside' ? '' : 'hidden'}" id="inside" style="width:${IW}px;height:${IH}px;background:${p.caseColor}">
-          <div class="left">${it.front ? `<img class="booklet" src="${esc(it.front)}" alt="${it.kind === 'movie' ? 'Libreto' : 'Manual'}">` : ''}</div>
-          <div class="right">${media}</div>
+        <div class="opened ${d.view === 'inside' ? '' : 'hidden'}" id="opened" style="width:${2 * W}px;height:${H}px;--W:${W}px;--sc:${sc}">
+          <div class="tray plastic" style="left:${W}px;width:${W}px;height:${H}px">${parts.tray}</div>
+          <div class="lid" id="lid" style="left:${W}px;width:${W}px;height:${H}px">
+            <div class="lid-out" style="padding:${rim}px">${frontInner}</div>
+            <div class="lid-in plastic">${parts.lid}</div>
+          </div>
         </div>
       </div>
+      <p class="drag-hint" id="dragHint">${d.view === 'inside' ? 'Así es por dentro' : 'Arrastra la caja para girarla'}</p>
       <div class="controls"><div class="seg" role="group" aria-label="Vista">${views.map(([id, n]) =>
         `<button data-act="view" data-id="${id}" aria-pressed="${d.view === id}">${n}</button>`).join('')}</div>${actions}</div></div>`;
+  }
+
+  // Aplica la rotación (con inclinación del móvil) y mueve el brillo
+  function applyBox() {
+    const box = document.getElementById('box'); if (!box) return;
+    const rx = fx.rx + (fx.drag ? 0 : fx.ty); const ry = fx.ry + (fx.drag ? 0 : fx.tx);
+    box.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+    const n = ((ry % 360) + 540) % 360 - 180; // -180..180
+    const g = 50 + (Math.abs(n) > 90 ? (180 - Math.abs(n)) * Math.sign(n) : n) * 0.9;
+    box.style.setProperty('--gx', `${g}%`);
+    const showsBack = Math.abs(n) > 90;
+    const want = showsBack ? 'back' : 'front';
+    if (state.detail && state.detail.view !== 'inside' && state.detail.view !== want) {
+      state.detail.view = want;
+      $layers.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === want)));
+    }
+  }
+
+  function goPreset(v) {
+    const box = document.getElementById('box'); if (!box) return;
+    box.classList.add('anim');
+    // Tomamos el camino corto hasta la vista pedida
+    const target = PRESET[v];
+    let ty = target.y; while (ty - fx.ry > 180) ty -= 360; while (fx.ry - ty > 180) ty += 360;
+    fx.rx = target.x; fx.ry = ty;
+    applyBox();
+  }
+
+  function setView(v) {
+    const d = state.detail; if (!d) return;
+    const scene = document.getElementById('scene'); const opened = document.getElementById('opened');
+    const hint = document.getElementById('dragHint');
+    const prev = d.view; d.view = v;
+    $layers.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === v)));
+    if (v === 'inside') {
+      scene.classList.add('hidden'); opened.classList.remove('hidden'); opened.classList.remove('open');
+      if (hint) hint.textContent = 'Así es por dentro';
+      void opened.offsetWidth; // fuerza el estado cerrado antes de abrir
+      requestAnimationFrame(() => requestAnimationFrame(() => opened.classList.add('open')));
+      if (navigator.vibrate) navigator.vibrate(15);
+      return;
+    }
+    if (hint) hint.textContent = 'Arrastra la caja para girarla';
+    if (prev === 'inside') {
+      opened.classList.remove('open');
+      setTimeout(() => {
+        if (!state.detail || state.detail.view === 'inside') return;
+        opened.classList.add('hidden'); scene.classList.remove('hidden');
+        const box = document.getElementById('box'); box.classList.remove('anim');
+        fx.rx = PRESET.front.x; fx.ry = PRESET.front.y; applyBox();
+        requestAnimationFrame(() => goPreset(v));
+      }, 650);
+      return;
+    }
+    goPreset(v);
+  }
+
+  function bindStage() {
+    const stage = document.getElementById('stage'); if (!stage) return;
+    stage.addEventListener('pointerdown', (e) => {
+      if (!state.detail || state.detail.view === 'inside') return;
+      const box = document.getElementById('box'); if (!box) return;
+      box.classList.remove('anim');
+      fx.drag = { x: e.clientX, y: e.clientY, rx: fx.rx, ry: fx.ry, t: performance.now(), vx: 0, lx: e.clientX };
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!fx.drag) return;
+      const dx = e.clientX - fx.drag.x; const dy = e.clientY - fx.drag.y;
+      const now = performance.now();
+      fx.drag.vx = (e.clientX - fx.drag.lx) / Math.max(1, now - fx.drag.t); fx.drag.lx = e.clientX; fx.drag.t = now;
+      fx.ry = fx.drag.ry + dx * 0.55;
+      fx.rx = Math.max(-35, Math.min(35, fx.drag.rx - dy * 0.35));
+      if (Math.abs(dx) > 6 && !fx.moved) { fx.moved = true; const h = document.getElementById('dragHint'); if (h) h.style.opacity = '0'; }
+      applyBox();
+    });
+    const end = () => {
+      if (!fx.drag) return;
+      const box = document.getElementById('box');
+      const fling = fx.drag.vx * 110; // pequeño impulso al soltar
+      fx.drag = null;
+      if (box && Math.abs(fling) > 8) { box.classList.add('anim'); fx.ry += Math.max(-70, Math.min(70, fling)); }
+      applyBox();
+    };
+    stage.addEventListener('pointerup', end);
+    stage.addEventListener('pointercancel', end);
+    stage.addEventListener('dblclick', () => { if (state.detail && state.detail.view !== 'inside') goPreset('front'); });
+  }
+
+  // Inclinación del móvil: la caja y el brillo se mueven un poco
+  let tiltOn = false;
+  function onTilt(e) {
+    if (!state.detail || e.gamma == null) return;
+    const tx = Math.max(-12, Math.min(12, e.gamma * 0.35));
+    const ty = Math.max(-10, Math.min(10, ((e.beta || 45) - 45) * -0.25));
+    fx.tx += (tx - fx.tx) * 0.25; fx.ty += (ty - fx.ty) * 0.25;
+    if (!fx.raf) fx.raf = requestAnimationFrame(() => { fx.raf = 0; if (!fx.drag && state.detail && state.detail.view !== 'inside') applyBox(); });
   }
 
   function openDetail(item, readOnly) {
     state.detail = { item, view: 'front', readOnly };
     state.layer = 'detail';
+    fx.rx = PRESET.front.x; fx.ry = PRESET.front.y - 70; fx.tx = 0; fx.ty = 0; fx.moved = false; fx.drag = null;
     $layers.innerHTML = detailHTML();
+    bindStage();
+    const box = document.getElementById('box'); box.classList.remove('anim'); applyBox();
+    requestAnimationFrame(() => requestAnimationFrame(() => goPreset('front')));
+    if (!tiltOn && 'DeviceOrientationEvent' in window) { window.addEventListener('deviceorientation', onTilt); tiltOn = true; }
   }
 
-  function setView(v) {
-    const d = state.detail; if (!d) return;
-    d.view = v;
-    const card = document.getElementById('card3d'); const inside = document.getElementById('inside');
-    card.classList.toggle('hidden', v === 'inside');
-    inside.classList.toggle('hidden', v !== 'inside');
-    // Al volver de "por dentro", colocamos la caja sin animación y luego giramos
-    requestAnimationFrame(() => card.classList.toggle('flipped', v === 'back'));
-    $layers.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === v)));
+  function rerenderDetail() {
+    const v = state.detail.view;
+    $layers.innerHTML = detailHTML();
+    bindStage();
+    const box = document.getElementById('box'); if (box) { box.classList.remove('anim'); applyBox(); }
+    if (v === 'inside') document.getElementById('opened').classList.add('open');
   }
 
   function closeLayer() {
@@ -304,7 +467,51 @@
     return index[plat];
   }
   function gameFromRow(plat, g) {
-    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]) };
+    if (typeof g[0] === 'string' && g[0].startsWith('t:')) {
+      return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2) };
+    }
+    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null };
+  }
+
+  // ---------- Imágenes de GameTDB (se buscan al añadir) ----------
+  const TDB_SYS = { ds: 'ds', '3ds': '3ds', switch: 'switch', switch2: 'switch2' };
+  const K_FRONT = [['coverHQ', 'jpg'], ['coverM', 'png'], ['cover', 'png'], ['coverM', 'jpg'], ['cover', 'jpg']];
+  const K_THUMB = [['cover', 'png'], ['coverM', 'png'], ['cover', 'jpg'], ['coverHQ', 'jpg']];
+  const K_FULL = [['coverfullHQ', 'jpg'], ['coverfull', 'jpg'], ['coverfullM', 'jpg'], ['coverfull', 'png']];
+  const K_MEDIA = [['cart', 'png'], ['cartHQ', 'png'], ['disc', 'png']];
+  function tdbLangs(reg) {
+    return ({ ES: ['ES', 'EN', 'US'], EU: ['EN', 'ES', 'US'], WW: ['ES', 'EN', 'US'], US: ['US', 'EN'], JP: ['JA', 'EN'], DE: ['DE', 'EN'], FR: ['FR', 'EN'], IT: ['IT', 'EN'], NL: ['NL', 'EN'], AU: ['AU', 'EN'], KR: ['KO', 'EN'] })[reg] || ['EN', 'ES', 'US'];
+  }
+  function tdbCands(r, kinds, langs) {
+    const out = [];
+    for (const l of (langs || tdbLangs(r.region))) for (const [t, e] of kinds) out.push(`https://art.gametdb.com/${TDB_SYS[r.plat]}/${t}/${l}/${r.tdb}.${e}`);
+    return out;
+  }
+  function probe(url, wide) {
+    return new Promise((res) => {
+      const im = new Image();
+      im.onload = () => res(im.naturalWidth > 40 && (!wide || im.naturalWidth > im.naturalHeight * 1.3) ? url : null);
+      im.onerror = () => res(null);
+      im.src = url;
+    });
+  }
+  async function firstOk(urls, wide) {
+    for (let i = 0; i < urls.length; i += 4) {
+      const got = (await Promise.all(urls.slice(i, i + 4).map((u) => probe(u, wide)))).find(Boolean);
+      if (got) return got;
+    }
+    return null;
+  }
+  async function resolveTdb(r) {
+    const [front, full, media] = await Promise.all([firstOk(tdbCands(r, K_FRONT)), firstOk(tdbCands(r, K_FULL), true), firstOk(tdbCands(r, K_MEDIA))]);
+    return Object.assign({}, r, { front, full, media });
+  }
+  function hydrateThumbs(root) {
+    root.querySelectorAll('img[data-cands]').forEach((img) => {
+      const list = img.dataset.cands.split('|'); let i = 0;
+      img.onerror = () => { i += 1; if (i < list.length) img.src = list[i]; else img.replaceWith(Object.assign(document.createElement('div'), { className: 'noimg' })); };
+      img.src = list[0];
+    });
   }
   async function searchGames(coll, q) {
     const nq = norm(q); if (nq.length < 2) return [];
@@ -324,8 +531,8 @@
   }
   async function findGame(plat, id) {
     const ix = await loadPlat(plat);
-    if (!ix.byId) { ix.byId = new Map(); ix.games.forEach((g) => ix.byId.set(g[0], g)); }
-    const g = ix.byId.get(Number(id));
+    if (!ix.byId) { ix.byId = new Map(); ix.games.forEach((g) => ix.byId.set(String(g[0]), g)); }
+    const g = ix.byId.get(String(id));
     return g ? gameFromRow(plat, g) : null;
   }
 
@@ -335,14 +542,34 @@
     if (!r.ok) throw new Error('wiki');
     return r.json();
   }
+  async function searchTmdb(q) {
+    const r = await fetch('https://api.themoviedb.org/3/search/multi?' + new URLSearchParams({ api_key: TMDB_KEY, language: 'es-ES', region: 'ES', query: q, include_adult: 'false' }));
+    if (!r.ok) throw new Error('tmdb');
+    const j = await r.json();
+    return (j.results || []).filter((m) => m.media_type === 'movie' || m.media_type === 'tv').slice(0, 14).map((m) => {
+      const title = m.title || m.name || '';
+      const orig = m.original_title || m.original_name || '';
+      const date = m.release_date || m.first_air_date || '';
+      return {
+        ref: `tmdb:${m.media_type}:${m.id}`, title, year: Number(date.slice(0, 4)) || null,
+        desc: [m.media_type === 'tv' ? 'Serie' : 'Película', date.slice(0, 4), orig && orig !== title ? orig : ''].filter(Boolean).join(' · '),
+        front: m.poster_path ? 'https://image.tmdb.org/t/p/w500' + m.poster_path : null, back: null, media: null
+      };
+    });
+  }
   async function searchMovies(q) {
+    if (norm(q).length < 2) return [];
+    try { return await searchTmdb(q); } catch (e) { return searchWiki(q, /pel[ií]cula|film|largometraje|serie/i, /\s*\((?:película|film|serie)[^)]*\)$/i); }
+  }
+  const searchWikiGames = (q) => searchWiki(q + ' videojuego', /videojuego|video ?game/i, /\s*\((?:videojuego|video game)[^)]*\)$/i);
+  async function searchWiki(q, kindRe, stripRe) {
     if (norm(q).length < 2) return [];
     const j = await wjson('https://es.wikipedia.org/w/api.php', {
       action: 'query', generator: 'search', gsrsearch: q, gsrlimit: '12', gsrnamespace: '0',
       prop: 'pageimages|description|pageprops', piprop: 'thumbnail', pithumbsize: '700', ppprop: 'wikibase_item'
     });
     let pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => a.index - b.index);
-    const films = pages.filter((p) => /pel[ií]cula|film|largometraje|serie/i.test(p.description || ''));
+    const films = pages.filter((p) => kindRe.test(p.description || ''));
     if (films.length) pages = films;
     pages = pages.slice(0, 8);
 
@@ -373,7 +600,7 @@
       const ym = (p.description || '').match(/\b(18|19|20)\d{2}\b/);
       return {
         ref: qid || p.title,
-        title: p.title.replace(/\s*\((?:película|film|serie)[^)]*\)$/i, ''),
+        title: p.title.replace(stripRe, ''),
         desc: p.description || '', year: ym ? Number(ym[0]) : null, front, back: null, media: null
       };
     });
@@ -386,12 +613,12 @@
     if (state.items.find((m) => m.kind === kind && m.plat === plat && String(m.ref) === String(r.ref))) return false;
     const it = {
       uid: uid(), kind, plat, ref: r.ref, title: r.title, year: r.year || null,
-      front: r.front || null, back: r.back || null, media: r.media || null,
+      front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
     state.items.push(it);
     saveItems();
-    cacheImgs([it.front, it.back, it.media]);
+    cacheImgs([it.front, it.back, it.media, it.full]);
     return true;
   }
 
@@ -420,7 +647,7 @@
         <label class="search">${I.search}<span class="sr">Título</span>
           <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${isMovie ? 'Título de la película…' : 'Título del juego…'}" value="${esc(a.q || '')}">
           ${canScan ? `<button class="icon-btn" data-act="scan" aria-label="Escanear código de barras" style="width:40px;height:40px">${I.scan}</button>` : ''}</label>
-        <div class="hint" id="hint">${isMovie ? 'Busca en Wikipedia. Tú eliges el formato: DVD o Blu-ray.' : `Busca entre todos los juegos de ${esc(coll.plats.map((p) => PLAT[p].short).join(' y '))}.`}</div>
+        <div class="hint" id="hint">${isMovie ? 'Títulos y carteles en español. Tú eliges el formato: DVD o Blu-ray.' : `Busca entre todos los juegos de ${esc(coll.plats.map((p) => PLAT[p].short).join(' y '))}.`}</div>
         <div class="results scroll" id="results"></div>
       </div></div>`;
   }
@@ -430,9 +657,16 @@
     return list.map((r, i) => {
       const p = isMovie ? plat : r.plat;
       const owned = state.items.find((m) => m.plat === p && String(m.ref) === String(r.ref) && m.kind === (isMovie ? 'movie' : 'game'));
-      return `<button class="result ${owned ? 'owned' : ''}" data-act="pick" data-i="${i}">
-        ${r.front ? `<img src="${esc(r.front)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
-        <div class="info"><b>${esc(r.title)}</b><small>${isMovie ? esc(r.desc) : `${esc(PLAT[r.plat].short)}${r.year ? ' · ' + esc(r.year) : ''}${r.back ? ' · con contraportada' : ''}`}</small></div>
+      const thumb = r.front ? `<img src="${esc(r.front)}" alt="" loading="lazy">`
+        : r.tdb ? `<img alt="" data-cands="${esc(tdbCands(r, K_THUMB, tdbLangs(r.region).slice(0, 2)).join('|'))}">` : '<div class="noimg"></div>';
+      if (r.wiki) {
+        const coll = collOf(state.add.coll);
+        return `<div class="result">${thumb}<div class="info"><b>${esc(r.title)}</b><small>${esc(r.desc)}</small></div>
+          <span class="wiki-picks">${coll.plats.map((pl) => `<button class="btn btn-ghost" data-act="pickWiki" data-i="${i}" data-plat="${pl}">${esc(PLAT[pl].short)}</button>`).join('')}</span></div>`;
+      }
+      const meta = isMovie ? esc(r.desc) : `${esc(PLAT[r.plat].short)}${r.year ? ' · ' + esc(r.year) : ''}${r.region ? ' · ' + esc(REGION_NAME[r.region] || r.region) : ''}`;
+      return `<button class="result ${owned ? 'owned' : ''}" data-act="pick" data-i="${i}">${thumb}
+        <div class="info"><b>${esc(r.title)}</b><small>${meta}</small></div>
         <span class="state">${owned ? 'En tu estantería' : 'Añadir'}</span></button>`;
     }).join('');
   }
@@ -450,8 +684,9 @@
     try {
       const list = isMovie ? await searchMovies(q) : await searchGames(coll, q);
       if (seq !== searchSeq || !state.add) return;
-      $res.innerHTML = resultsHTML(list, isMovie, a.fmt);
-      $hint.textContent = list.length ? 'Toca el tuyo para ponerlo en la estantería.' : 'No encuentro nada con ese título. Prueba con menos palabras o en inglés.';
+      $res.innerHTML = resultsHTML(list, isMovie, a.fmt) + (isMovie ? '' : `<button class="btn btn-ghost wiki-more" data-act="wikiGames">¿No aparece? Buscarlo en Wikipedia</button>`);
+      hydrateThumbs($res);
+      $hint.textContent = list.length ? 'Toca el tuyo para ponerlo en la estantería.' : 'No está en el catálogo. Prueba con menos palabras, en inglés, o búscalo en Wikipedia.';
     } catch (e) {
       if (seq !== searchSeq) return;
       $hint.textContent = isMovie ? 'No he podido conectar con Wikipedia. ¿Tienes conexión?' : 'No he podido cargar el catálogo de juegos. ¿Tienes conexión?';
@@ -565,12 +800,17 @@
     return new Uint8Array(await res.arrayBuffer());
   }
   const WIKI = 'https://upload.wikimedia.org/wikipedia/';
+  const SHORT = [['~', WIKI], ['^', 'https://art.gametdb.com/'], ['*', 'https://image.tmdb.org/t/p/'], ['!', 'https://images.launchbox-app.com/']];
+  const shortU = (u) => { if (!u) return ''; const m = SHORT.find(([, p]) => u.startsWith(p)); return m ? m[0] + u.slice(m[1].length) : u; };
+  const longU = (u) => { if (typeof u !== 'string' || !u) return null; const m = SHORT.find(([k]) => u[0] === k); return safeImg(m ? m[1] + u.slice(1) : u); };
   async function encodeShare() {
     const payload = {
       v: 1, n: state.name || 'Un amigo',
-      i: state.items.map((it) => it.kind === 'game'
-        ? [0, it.plat, it.ref, it.face ? 1 : 0]
-        : [1, it.plat, it.title, it.year || 0, it.front && it.front.startsWith(WIKI) ? '~' + it.front.slice(WIKI.length) : (it.front || ''), it.face ? 1 : 0, String(it.ref)])
+      i: state.items.map((it) => {
+        if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0];
+        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back)];
+        return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.ref)];
+      })
     };
     const raw = new TextEncoder().encode(JSON.stringify(payload));
     if ('CompressionStream' in window) return 'd' + b64url(await streamBytes(raw, window.CompressionStream));
@@ -592,8 +832,9 @@
         let g = null; try { g = await findGame(x[1], x[2]); } catch (e) { g = null; }
         if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g));
       } else if (x[0] === 1 && PLAT[x[1]].coll === 'mov') {
-        const f = typeof x[4] === 'string' && x[4].startsWith('~') ? WIKI + x[4].slice(1) : x[4];
-        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: safeImg(f), back: null, media: null, face: !!x[5] });
+        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5] });
+      } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov') {
+        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8] });
       }
     }
     return { name, items };
@@ -653,7 +894,9 @@
         <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Guarda una copia por si cambias de teléfono o borras los datos del navegador.</p>
           <div class="row"><button class="btn btn-ghost" data-act="export">${I.download}Guardar</button><button class="btn btn-ghost" data-act="import">Recuperar</button></div>
           <input type="file" id="importFile" accept="application/json,.json" class="hidden"></div>
-        <div class="card"><h3>De dónde salen las imágenes</h3><p>Juegos: LaunchBox Games Database, una base de datos comunitaria${CATALOG_DATE ? ` (catálogo del ${esc(CATALOG_DATE)})` : ''}. Películas: Wikipedia. Ludoteca es un proyecto personal sin ánimo de lucro.</p></div>
+        <div class="card"><h3>De dónde salen las imágenes</h3><p>Nintendo: <a href="https://www.gametdb.com" target="_blank" rel="noopener">GameTDB</a>. PlayStation y resto de juegos: <a href="https://gamesdb.launchbox-app.com" target="_blank" rel="noopener">LaunchBox Games Database</a>${CATALOG_DATE ? ` (catálogo del ${esc(CATALOG_DATE)})` : ''}. Juegos que faltan: Wikipedia.</p>
+          <p>Películas y series: <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>. Este producto usa la API de TMDB pero no está respaldado ni certificado por TMDB.</p>
+          <p>Ludoteca es un proyecto personal sin ánimo de lucro.</p></div>
       </div></div>`;
   }
   function exportBackup() {
@@ -672,7 +915,7 @@
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
           uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), face: !!i.face, added: i.added || Date.now()
+          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, added: i.added || Date.now()
         }));
         state.items = clean; saveItems();
         if (Array.isArray(j.friends)) {
@@ -680,7 +923,7 @@
             id: String(f.id), name: String(f.name || 'Amigo').slice(0, 40), received: Number(f.received) || Date.now(),
             items: f.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
               uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), face: !!i.face
+              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face
             }))
           }));
           saveFriends();
@@ -710,7 +953,7 @@
       case 'closeLayer': closeLayer(); break;
       case 'toggleFace': {
         const it = state.detail && state.items.find((x) => x.uid === state.detail.item.uid);
-        if (it) { it.face = !it.face; saveItems(); state.detail.item = it; $layers.innerHTML = detailHTML(); render(); }
+        if (it) { it.face = !it.face; saveItems(); state.detail.item = it; rerenderDetail(); render(); }
         break;
       }
       case 'remove': {
@@ -722,18 +965,45 @@
       }
       case 'copyToMine': {
         const it = state.detail.item;
-        if (addItem(it, it.kind, it.plat)) { toast('Añadido a tu estantería'); $layers.innerHTML = detailHTML(); }
+        if (addItem(it, it.kind, it.plat)) { toast('Añadido a tu estantería'); rerenderDetail(); }
         break;
       }
       case 'add': openAdd(state.tab); break;
       case 'addColl': state.add.coll = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'addFmt': state.add.fmt = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'pick': {
-        const r = lastResults[Number(el.dataset.i)]; if (!r) break;
+        let r = lastResults[Number(el.dataset.i)]; if (!r) break;
         const isMovie = state.add.coll === 'mov';
         const plat = isMovie ? state.add.fmt : r.plat;
+        if (state.items.find((m) => m.plat === plat && String(m.ref) === String(r.ref))) { toast('Ya lo tienes en la estantería'); break; }
+        if (r.tdb && !r.front && !r.full) {
+          el.querySelector('.state').textContent = 'Buscando…';
+          r = await resolveTdb(r);
+          if (!state.add) break;
+        }
         if (addItem(r, isMovie ? 'movie' : 'game', plat)) {
           el.classList.add('owned'); el.querySelector('.state').textContent = 'En tu estantería';
+          state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = 'mine'; state.friendId = null; render();
+          toast(`${r.title} ya está en tu estantería`);
+        } else toast('Ya lo tienes en la estantería');
+        break;
+      }
+      case 'wikiGames': {
+        const q = (document.getElementById('q') || {}).value || '';
+        const $res = document.getElementById('results'); const $hint = document.getElementById('hint');
+        $hint.textContent = 'Buscando en Wikipedia…';
+        try {
+          const list = (await searchWikiGames(q)).map((r) => Object.assign(r, { wiki: true, ref: 'w:' + r.ref }));
+          if (!state.add) break;
+          $res.innerHTML = resultsHTML(list, false, null);
+          $hint.textContent = list.length ? 'Elige la consola de tu edición. Solo trae portada, sin contraportada.' : 'Tampoco aparece en Wikipedia. Prueba con el título en inglés.';
+        } catch (err) { $hint.textContent = 'No he podido conectar con Wikipedia.'; }
+        break;
+      }
+      case 'pickWiki': {
+        const r = lastResults[Number(el.dataset.i)]; const plat = el.dataset.plat; if (!r || !PLAT[plat]) break;
+        if (addItem(r, 'game', plat)) {
+          el.closest('.result').classList.add('owned');
           state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = 'mine'; state.friendId = null; render();
           toast(`${r.title} ya está en tu estantería`);
         } else toast('Ya lo tienes en la estantería');
@@ -758,7 +1028,7 @@
     }
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.layer) closeLayer(); });
-  window.addEventListener('resize', debounce(() => { render(); if (state.layer === 'detail') $layers.innerHTML = detailHTML(); }, 200));
+  window.addEventListener('resize', debounce(() => { render(); if (state.layer === 'detail') rerenderDetail(); }, 200));
   window.addEventListener('hashchange', receiveFromHash);
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
 

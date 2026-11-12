@@ -25,10 +25,11 @@ Después, cada lunes se actualiza sola con los juegos nuevos del catálogo. Pás
 
 | Pieza | Qué hace |
 |---|---|
-| `tools/build_index.py` | Descarga la base de datos pública de LaunchBox (`Metadata.zip`, se actualiza a diario) y genera un índice ligero solo con DS, 3DS, Switch, Switch 2, PS4 y PS5, eligiendo la portada y la contraportada europea o española cuando existen. |
+| `tools/build_index.py` | Descarga LaunchBox (`Metadata.zip`) y, para DS, 3DS y Switch, GameTDB (`tools/gametdb.py`): títulos en español y una edición por juego, prefiriendo la española y luego la europea. Genera un índice ligero por plataforma. |
 | `site/` | La app (HTML, CSS y JavaScript sin dependencias). La colección se guarda en el propio móvil. |
 | `site/sw.js` | Hace que funcione sin conexión y guarda las portadas de tu colección. |
-| Películas | Se buscan en Wikipedia (sin clave). No hay fuente abierta de contraportadas de DVD/Blu-ray, así que se genera una a partir de la portada. |
+| Películas | TMDB en español (títulos y carteles de España), con Wikipedia de respaldo. No hay fuente abierta de contraportadas de DVD/Blu-ray: la trasera se muestra lisa. |
+| Juegos que faltan | Botón "¿No aparece?": se buscan en Wikipedia (solo portada). |
 | Compartir | El enlace lleva tu colección comprimida (solo identificadores, no imágenes). |
 | Escáner | Lee el código con la cámara y consulta UPCitemdb (gratis, sin registro, 100 consultas al día). Si no lo reconoce, escribes el título. |
 
@@ -43,5 +44,5 @@ cd /tmp/ludo-test && python3 -m http.server 8765    # abre http://localhost:8765
 
 ## Créditos
 
-Imágenes y datos de juegos: [LaunchBox Games Database](https://gamesdb.launchbox-app.com/), mantenida por su comunidad.
-Películas: Wikipedia y Wikidata. Proyecto personal y sin ánimo de lucro: no la uses para vender nada.
+Juegos: [GameTDB](https://www.gametdb.com) y [LaunchBox Games Database](https://gamesdb.launchbox-app.com/), mantenidas por sus comunidades.
+Películas: [TMDB](https://www.themoviedb.org) (este producto usa la API de TMDB pero no está respaldado ni certificado por TMDB), Wikipedia y Wikidata. Proyecto personal y sin ánimo de lucro: no la uses para vender nada.
