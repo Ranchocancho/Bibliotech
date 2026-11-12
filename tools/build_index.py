@@ -49,6 +49,31 @@ BACK_TYPES = ["Box - Back", "Box - Back - Reconstructed"]
 MEDIA_TYPES = ["Disc", "Cart - Front"]
 
 # Preferimos ediciones españolas y europeas (PAL)
+# Géneros en español (comunes a LaunchBox y GameTDB)
+GENRE_MAP = [
+    (r"role|rpg|mmo", "Rol"), (r"platform", "Plataformas"), (r"puzzle", "Puzle"),
+    (r"racing|driving", "Carreras"), (r"sport|fitness|golf|soccer|football|tennis", "Deportes"),
+    (r"fight|beat", "Lucha"), (r"shoot|fps|gun", "Disparos"), (r"strateg|tactic|tower defense", "Estrategia"),
+    (r"simulat|life|sandbox|farm|management|construction", "Simulación"), (r"party|board|card|trivia|quiz", "Party"),
+    (r"music|rhythm|danc", "Música"), (r"horror|survival", "Terror"), (r"stealth", "Sigilo"),
+    (r"educat|brain|learning", "Educativo"), (r"arcade|pinball", "Arcade"),
+    (r"adventure|visual novel|point", "Aventura"), (r"action|hack|metroidvania|roguelike", "Acción"),
+]
+
+
+def genres_es(text):
+    out = []
+    for part in re.split(r"[;,/]", text or ""):
+        p = part.strip().lower()
+        if not p:
+            continue
+        for rx, name in GENRE_MAP:
+            if re.search(rx, p) and name not in out:
+                out.append(name)
+                break
+    return out[:4]
+
+
 REGION_RANK = {
     "spain": 0, "europe": 1, "united kingdom": 2, "world": 3, "": 4,
     "france": 5, "germany": 5, "italy": 5, "australia": 6,
@@ -152,7 +177,7 @@ def main():
             if not plat or not gid or not gid.isdigit():
                 continue
             games[int(gid)] = {"plat": plat, "name": g.get("name", ""), "year": year_of(g),
-                               "images": {}, "alts": set()}
+                               "images": {}, "alts": set(), "genres": genres_es(g.get("genres", ""))}
     print(f"Juegos encontrados: {len(games)}", file=sys.stderr)
 
     # Pasada 2: imágenes y nombres alternativos
@@ -175,6 +200,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     per_plat = {k: [] for k in set(PLATFORMS.values())}
+    img_extra = {}
     for gid, g in games.items():
         front = pick(g["images"], FRONT_TYPES)
         if not front:
@@ -183,11 +209,17 @@ def main():
         back = pick(g["images"], BACK_TYPES, region)
         media = pick(g["images"], MEDIA_TYPES, region)
         row = [gid, g["name"], g["year"], front[0],
-               back[0] if back else None, media[0] if media else None]
-        alts = sorted(g["alts"])[:6]
-        if alts:
-            row.append(alts)
+               back[0] if back else None, media[0] if media else None,
+               sorted(g["alts"])[:6], None, g["genres"]]
         per_plat[g["plat"]].append(row)
+        # Todas las imágenes del juego, para "Elegir otra imagen"
+        allimg = []
+        for code, types in (("f", FRONT_TYPES), ("b", BACK_TYPES), ("m", MEDIA_TYPES)):
+            for t in types:
+                for fn, rg in g["images"].get(t, []):
+                    allimg.append([code, rg or "", fn])
+        if len(allimg) > 3:
+            img_extra.setdefault(g["plat"], {})[str(gid)] = allimg[:24]
 
     # DS, 3DS y Switch: GameTDB (títulos en español, edición española/europea).
     # Los juegos de LaunchBox que no estén en GameTDB se conservan.
@@ -218,6 +250,8 @@ def main():
             json.dump({"v": 1, "plat": plat, "updated": stamp, "games": rows},
                       fh, ensure_ascii=False, separators=(",", ":"))
         summary[plat] = len(rows)
+        with open(os.path.join(args.out, f"images-{plat}.json"), "w", encoding="utf-8") as fh:
+            json.dump(img_extra.get(plat, {}), fh, separators=(",", ":"))
         print(f"  {plat}: {len(rows)} juegos con portada -> {path}", file=sys.stderr)
 
     with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as fh:

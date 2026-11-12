@@ -6,7 +6,10 @@ Tu colección de videojuegos y películas en una estantería de madera, pensada 
 - Escribes el título, eliges el tuyo y la caja aparece con su portada, contraportada y disco o cartucho.
 - Toca una caja para sacarla: gira para ver la contraportada y se abre para ver el interior.
 - Elige qué cajas van de frente y cuáles de lado.
-- Comparte tu estantería con un enlace y cotillea las de tus amigos (pestaña Amigos).
+- Lista de deseos, filtros por género (con etiquetas propias), búsqueda y orden dentro de cada balda.
+- Visor a pantalla completa con zoom y "Elegir otra imagen" entre todas las versiones de los catálogos.
+- Comparte tu estantería con un enlace y cotillea las de tus amigos (pestaña Amigos), con los juegos en común marcados.
+- Estadísticas de tu colección.
 - Escáner de códigos de barras (Android con Chrome) como atajo.
 - Funciona sin conexión y se instala como una app. Nadie necesita cuenta.
 

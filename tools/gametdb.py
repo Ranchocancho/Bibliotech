@@ -75,6 +75,11 @@ def fetch(plat, cache):
     return None
 
 
+def genres_es(t):
+    from build_index import genres_es as g  # misma tabla de géneros
+    return g(t)
+
+
 def text(el, tag):
     c = el.find(tag)
     return (c.text or "").strip() if c is not None and c.text else ""
@@ -91,6 +96,7 @@ def region_of(plat, gid, region_field):
 def parse(plat, data):
     root = ET.fromstring(data)
     best = {}
+    editions = {}
     for g in root.iter("game"):
         gid = text(g, "id")
         if not gid or not re.fullmatch(r"[A-Z0-9]{4,6}", gid):
@@ -114,15 +120,18 @@ def parse(plat, data):
         if d is not None and (d.get("year") or "").isdigit():
             year = int(d.get("year"))
         reg = region_of(plat, gid, text(g, "region"))
+        genres = genres_es(text(g, "genre"))
         alts = sorted({t for t in [en, name_attr] + list(titles.values()) if t and t != title})[:6]
         # Agrupamos ediciones del mismo juego (mismo título en inglés)
         key = norm(en) or norm(title)
-        cand = (RANK.get(reg, 7), gid, title, year, alts, reg)
+        cand = (RANK.get(reg, 7), gid, title, year, alts, reg, genres)
+        editions.setdefault(key, []).append((RANK.get(reg, 7), gid, reg))
         if key not in best or cand[0] < best[key][0]:
             best[key] = cand
     rows = []
-    for key, (_rank, gid, title, year, alts, reg) in best.items():
-        rows.append(["t:" + gid, title, year, None, None, None, alts, reg])
+    for key, (_rank, gid, title, year, alts, reg, genres) in best.items():
+        others = [[i, r] for _rk, i, r in sorted(editions.get(key, [])) if i != gid][:6]
+        rows.append(["t:" + gid, title, year, None, None, None, alts, reg, genres, others])
     return rows
 
 

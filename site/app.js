@@ -63,6 +63,12 @@
     scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M20 8V5h-3M4 16v3h3M20 16v3h-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="#c9a77c" stroke-width="2" stroke-linecap="round" aria-hidden="true" width="18" height="18"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+    zoom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M11 8v6M8 11h6"/></svg>',
+    images: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12M3 15l4-4 4 4 3-3 3 3"/></svg>',
+    tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>'
   };
 
@@ -72,8 +78,10 @@
     friends: LS.get('ludo.friends', []),
     name: LS.get('ludo.name', ''),
     tab: LS.get('ludo.tab', 'sw'),
-    mode: 'mine',          // 'mine' | 'friends'
+    mode: 'mine',          // 'mine' | 'wish' | 'friends'
     friendId: null,        // estantería de amigo abierta
+    friendWish: false,     // en un amigo: ver sus deseos
+    filter: { q: '', sort: LS.get('ludo.sort', 'title'), genre: '', notMine: false },
     detail: null,          // { item, view, readOnly }
     add: null,             // { coll, fmt }
     layer: null            // 'detail' | 'add' | 'share' | 'settings' | 'scan'
@@ -100,39 +108,63 @@
 
   // ---------- Vista principal ----------
   function currentFriend() { return state.friendId ? state.friends.find((f) => f.id === state.friendId) : null; }
-  function shownItems() { const f = currentFriend(); return f ? f.items : state.items; }
+  // Todo lo de la persona que se está viendo (yo o un amigo), estantería + deseos
+  function allShown() { const f = currentFriend(); return f ? f.items : state.items; }
+  // Lo que toca ver ahora: estantería o lista de deseos
+  function shownItems() {
+    const f = currentFriend();
+    const wish = f ? state.friendWish : state.mode === 'wish';
+    return allShown().filter((i) => !!i.wish === wish);
+  }
+  const owned = () => state.items.filter((i) => !i.wish);
+  function ownMatch(it) {
+    const t = norm(it.title);
+    return owned().find((m) => (m.plat === it.plat && String(m.ref) === String(it.ref)) ||
+      (PLAT[m.plat].coll === PLAT[it.plat].coll && norm(m.title) === t));
+  }
+  const itemGenres = (i) => Array.isArray(i.genres) ? i.genres : [];
+
+  function tabsHTML(items, coll) {
+    const counts = Object.fromEntries(COLLS.map((c) => [c.id, items.filter((i) => PLAT[i.plat] && PLAT[i.plat].coll === c.id).length]));
+    return `<nav class="tabs" role="tablist" aria-label="Colecciones">${COLLS.map((c) =>
+      `<button role="tab" data-act="tab" data-id="${c.id}" aria-selected="${c.id === coll.id}">${esc(c.name)}<span class="n">${counts[c.id]}</span></button>`).join('')}</nav>`;
+  }
 
   function render() {
     const friend = currentFriend();
     const items = shownItems();
     const coll = collOf(state.tab);
-    const counts = Object.fromEntries(COLLS.map((c) => [c.id, items.filter((i) => PLAT[i.plat] && PLAT[i.plat].coll === c.id).length]));
-    const tabs = `<nav class="tabs" role="tablist" aria-label="Colecciones">${COLLS.map((c) =>
-      `<button role="tab" data-act="tab" data-id="${c.id}" aria-selected="${c.id === coll.id}">${esc(c.name)}<span class="n">${counts[c.id]}</span></button>`).join('')}</nav>`;
 
     if (friend) {
+      const own = friend.items.filter((i) => !i.wish); const wish = friend.items.filter((i) => i.wish);
+      const common = own.filter((i) => ownMatch(i)).length;
       $top.innerHTML = `<div class="friend-banner"><button class="icon-btn" data-act="closeFriend" aria-label="Volver a mis amigos">${I.back}</button>
         <div><div class="kicker">Estantería de</div><div class="who">${esc(friend.name)}</div></div>
-        <div style="flex:1"></div><div class="when">Recibida el ${esc(fmtDate(friend.received))}</div></div>${tabs}`;
+        <div style="flex:1"></div><div class="when">${common ? `${common} en común<br>` : ''}Recibida el ${esc(fmtDate(friend.received))}</div></div>
+        <div class="modes" role="group" aria-label="Qué ver"><button data-act="friendWish" data-id="0" aria-pressed="${!state.friendWish}">Su estantería · ${own.length}</button>
+        <button data-act="friendWish" data-id="1" aria-pressed="${!!state.friendWish}">Sus deseos · ${wish.length}</button></div>${tabsHTML(items, coll)}`;
     } else {
+      const nWish = state.items.filter((i) => i.wish).length;
       $top.innerHTML = `<div class="top-row"><div><div class="kicker">Mi colección</div><h1 class="brand">Ludoteca</h1></div>
-        <div class="top-actions"><button class="icon-btn" data-act="share" aria-label="Compartir mi estantería">${I.share}</button>
+        <div class="top-actions"><button class="icon-btn" data-act="stats" aria-label="Estadísticas">${I.chart}</button>
+        <button class="icon-btn" data-act="share" aria-label="Compartir mi estantería">${I.share}</button>
         <button class="icon-btn" data-act="settings" aria-label="Ajustes">${I.gear}</button></div></div>
-        <div class="modes" role="group" aria-label="Qué estanterías ver"><button data-act="mode" data-id="mine" aria-pressed="${state.mode === 'mine'}">Mi estantería</button>
+        <div class="modes modes3" role="group" aria-label="Qué estanterías ver">
+        <button data-act="mode" data-id="mine" aria-pressed="${state.mode === 'mine'}">Estantería</button>
+        <button data-act="mode" data-id="wish" aria-pressed="${state.mode === 'wish'}">Deseos${nWish ? ` · ${nWish}` : ''}</button>
         <button data-act="mode" data-id="friends" aria-pressed="${state.mode === 'friends'}">Amigos${state.friends.length ? ` · ${state.friends.length}` : ''}</button></div>
-        ${state.mode === 'mine' ? tabs : '<div style="height:12px"></div>'}`;
+        ${state.mode !== 'friends' ? tabsHTML(items, coll) : '<div style="height:12px"></div>'}`;
     }
 
-    if (!friend && state.mode === 'friends') {
-      renderFriends();
-    } else {
-      renderShelf(items, coll, !!friend);
-    }
+    if (!friend && state.mode === 'friends') renderFriends();
+    else renderShelf(items, coll, !!friend);
 
     if (friend) {
       $dock.innerHTML = `<span>Solo lectura · toca una caja para verla</span><button class="btn btn-ghost" data-act="closeFriend">Cerrar</button>`;
     } else if (state.mode === 'friends') {
       $dock.innerHTML = `<span>Enséñales la tuya</span><button class="btn btn-amber" data-act="share">${I.share}Compartir</button>`;
+    } else if (state.mode === 'wish') {
+      $dock.innerHTML = `<span>Lo que te gustaría tener</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la lista de deseos">${I.plus}Deseo</button>`;
     } else {
       $dock.innerHTML = `<span>${items.length ? 'Toca un lomo para sacarlo' : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
     }
@@ -163,38 +195,80 @@
       : `<div style="position:absolute;inset:0;display:flex;align-items:flex-end;padding:8px;background:${colorFor(it.title)};font:800 11px/1.05 var(--serif);color:#fff">${esc(it.title)}</div>`;
   }
 
-  function itemHTML(it, tilt) {
+  function itemHTML(it, tilt, badge) {
     const p = PLAT[it.plat];
-    const label = esc(`${it.title}, ${p.short}`);
+    const label = esc(`${it.title}, ${p.short}${badge ? ', tú también lo tienes' : ''}`);
+    const mark = badge ? `<i class="both" aria-hidden="true">${I.check}</i>` : '';
+    const cls = it.wish ? ' wish' : '';
     if (it.face) {
-      return `<button class="item front" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}">
+      return `<button class="item front${cls}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}">${mark}
         <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor}">
           <div class="cover">${coverInner(it)}</div></div></button>`;
     }
     const art = it.full ? `background-image:url('${cssUrl(it.full)}');background-size:auto 100%;background-position:50% 0`
       : it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
-    return `<button class="item spine" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">
+    return `<button class="item spine${cls}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">${mark}
       <div class="body" style="width:${p.sw}px;height:${p.h}px;background:${p.caseColor}">
         <div style="height:14px;flex:none"></div><div class="art" style="${art}"><span>${esc(it.title)}</span></div><div style="height:16px;flex:none"></div>
       </div></button>`;
   }
 
+  const SORTS = [['title', 'A–Z'], ['added', 'Recientes'], ['year', 'Año'], ['plat', 'Consola']];
+  function sortList(list) {
+    const s = state.filter.sort;
+    const t = (a, b) => byTitle(a, b);
+    if (s === 'added') return list.sort((a, b) => (b.added || 0) - (a.added || 0) || t(a, b));
+    if (s === 'year') return list.sort((a, b) => (b.year || 0) - (a.year || 0) || t(a, b));
+    if (s === 'plat') return list.sort((a, b) => a.plat.localeCompare(b.plat) || t(a, b));
+    return list.sort(t);
+  }
+  function filtered(list, readOnly) {
+    const f = state.filter; const q = norm(f.q);
+    return list.filter((i) => (!q || norm(i.title).includes(q)) &&
+      (!f.genre || itemGenres(i).includes(f.genre)) &&
+      (!readOnly || !f.notMine || !ownMatch(i)));
+  }
+
   function renderShelf(items, coll, readOnly) {
-    const list = items.filter((i) => PLAT[i.plat] && PLAT[i.plat].coll === coll.id).sort(byTitle);
-    const head = `<div class="wall-head"><h2>${esc(coll.full)}</h2><span>${plural(list.length, coll.noun)}</span></div>`;
-    if (!list.length) {
+    const all = items.filter((i) => PLAT[i.plat] && PLAT[i.plat].coll === coll.id);
+    const genres = [...new Set(all.flatMap(itemGenres))].sort((a, b) => a.localeCompare(b, 'es'));
+    if (state.filter.genre && !genres.includes(state.filter.genre)) state.filter.genre = '';
+    const wish = readOnly ? state.friendWish : state.mode === 'wish';
+    const noun = wish ? ['deseo', 'deseos'] : coll.noun;
+    const head = `<div class="wall-head"><h2>${esc(wish ? (readOnly ? 'Sus deseos' : 'Mis deseos') : coll.full)}</h2><span>${plural(all.length, noun)}</span></div>`;
+    const tools = all.length ? `<div class="shelf-tools">
+        <label class="mini-search">${I.search}<span class="sr">Buscar en esta balda</span><input id="shelfQ" type="search" placeholder="Buscar en la balda" value="${esc(state.filter.q)}" autocomplete="off"></label>
+        <label class="sort"><span class="sr">Ordenar</span><select id="sortSel">${SORTS.map(([v, n]) => `<option value="${v}" ${state.filter.sort === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+      ${genres.length || readOnly ? `<div class="chips" role="group" aria-label="Filtrar por género">
+        <button data-act="genre" data-id="" aria-pressed="${!state.filter.genre && !state.filter.notMine}">Todos</button>
+        ${readOnly ? `<button data-act="notMine" aria-pressed="${!!state.filter.notMine}">Los que no tengo</button>` : ''}
+        ${genres.map((g) => `<button data-act="genre" data-id="${esc(g)}" aria-pressed="${state.filter.genre === g}">${esc(g)}</button>`).join('')}</div>` : ''}` : '';
+    $content.innerHTML = head + tools + '<div id="shelfRows"></div>';
+    const q = document.getElementById('shelfQ');
+    if (q) q.addEventListener('input', () => { state.filter.q = q.value; renderRows(all, coll, readOnly, wish); });
+    const sel = document.getElementById('sortSel');
+    if (sel) sel.addEventListener('change', () => { state.filter.sort = sel.value; LS.set('ludo.sort', sel.value); renderRows(all, coll, readOnly, wish); });
+    renderRows(all, coll, readOnly, wish);
+  }
+
+  function renderRows(all, coll, readOnly, wish) {
+    const $rows = document.getElementById('shelfRows'); if (!$rows) return;
+    const list = sortList(filtered(all, readOnly));
+    if (!all.length) {
       const msg = readOnly
-        ? `<div class="empty"><h3>Balda vacía</h3><p>Todavía no tiene nada en esta estantería.</p></div>`
-        : `<div class="empty"><h3>Esta balda está vacía</h3><p>Busca por título y la caja aparecerá aquí con su portada y su contraportada.</p><button class="btn btn-amber" data-act="add">${I.plus}Añadir el primero</button></div>`;
-      $content.innerHTML = head + `<div class="shelf"><div class="shelf-row" style="min-height:60px"></div><div class="plank"></div><div class="plank-under"></div></div>` + msg;
+        ? `<div class="empty"><h3>Balda vacía</h3><p>${wish ? 'No tiene deseos en esta balda.' : 'Todavía no tiene nada en esta estantería.'}</p></div>`
+        : wish
+          ? `<div class="empty"><h3>Sin deseos todavía</h3><p>Apunta aquí los juegos y películas que te gustaría tener. Se verán en tus estanterías como cajas transparentes y tus amigos los verán al compartir.</p><button class="btn btn-amber" data-act="add">${I.plus}Añadir un deseo</button></div>`
+          : `<div class="empty"><h3>Esta balda está vacía</h3><p>Busca por título y la caja aparecerá aquí con su portada y su contraportada.</p><button class="btn btn-amber" data-act="add">${I.plus}Añadir el primero</button></div>`;
+      $rows.innerHTML = `<div class="shelf"><div class="shelf-row" style="min-height:60px"></div><div class="plank"></div><div class="plank-under"></div></div>` + msg;
       return;
     }
+    if (!list.length) { $rows.innerHTML = `<p class="hint" style="text-align:center;margin:28px 20px">Nada coincide con el filtro.</p>`; return; }
     const max = shelfWidth();
-    const rows = pack(list, max);
-    $content.innerHTML = head + rows.map((r) => {
+    $rows.innerHTML = pack(list, max).map((r) => {
       const last = r.items[r.items.length - 1];
       return `<div class="shelf"><div class="shelf-row">${r.items.map((it) =>
-        itemHTML(it, it === last && !it.face && max - r.w > 40 ? 9 : 0)).join('')}</div><div class="plank"></div><div class="plank-under"></div></div>`;
+        itemHTML(it, it === last && !it.face && max - r.w > 40 ? 9 : 0, readOnly && !it.wish && !!ownMatch(it))).join('')}</div><div class="plank"></div><div class="plank-under"></div></div>`;
     }).join('');
   }
 
@@ -207,11 +281,13 @@
     }
     const sorted = state.friends.slice().sort((a, b) => b.received - a.received);
     $content.innerHTML = `<div class="friends">${sorted.map((f) => {
-      const by = COLLS.map((c) => [c, f.items.filter((i) => PLAT[i.plat].coll === c.id).length]).filter((x) => x[1]);
-      const covers = f.items.filter((i) => i.front).slice(0, 3).map((i) => `<img src="${esc(i.front)}" alt="" loading="lazy">`).join('');
+      const own = f.items.filter((i) => !i.wish);
+      const common = own.filter((i) => ownMatch(i)).length;
+      const by = COLLS.map((c) => [c, own.filter((i) => PLAT[i.plat].coll === c.id).length]).filter((x) => x[1]);
+      const covers = own.filter((i) => i.front).slice(0, 3).map((i) => `<img src="${esc(i.front)}" alt="" loading="lazy">`).join('');
       return `<div class="friend"><button class="open" data-act="openFriend" data-id="${esc(f.id)}">
         <b>${esc(f.name)}</b><small>${by.map(([c, n]) => `${esc(c.name)} ${n}`).join(' · ') || 'Estantería vacía'}</small>
-        <small>Actualizada el ${esc(fmtDate(f.received))}</small></button>
+        <small>${common ? `${common} en común · ` : ''}Actualizada el ${esc(fmtDate(f.received))}</small></button>
         <div class="mini-covers" aria-hidden="true">${covers}</div>
         <button class="icon-btn" data-act="removeFriend" data-id="${esc(f.id)}" aria-label="Quitar a ${esc(f.name)}">${I.trash}</button></div>`;
     }).join('')}<p class="hint" style="text-align:center">Para ver sus novedades, pídeles que te vuelvan a mandar su enlace.</p></div>`;
@@ -298,19 +374,28 @@
     const views = [['front', 'Portada'], ['back', 'Contraportada'], ['inside', 'Por dentro']];
 
     let actions;
+    const zoomBtn = `<button class="btn btn-ghost sq" data-act="viewer" aria-label="Ver en grande">${I.zoom}</button>`;
     if (d.readOnly) {
-      actions = ownedSame(it)
-        ? `<div class="row"><button class="btn btn-ghost" disabled>Tú también lo tienes</button></div>`
-        : `<div class="row"><button class="btn btn-amber" data-act="copyToMine">${I.plus}Lo tengo yo también</button></div>`;
+      const mine = it.wish ? null : ownMatch(it);
+      actions = `<div class="row">${mine
+        ? `<button class="btn btn-ghost" disabled>${I.check}Tú también lo tienes</button>`
+        : `<button class="btn btn-amber" data-act="copyToMine">${I.plus}Lo tengo</button><button class="btn btn-ghost" data-act="copyToWish">${I.heart}Lo quiero</button>`}${zoomBtn}</div>`;
+    } else if (it.wish) {
+      actions = `<div class="row"><button class="btn btn-amber" data-act="gotIt">${I.check}¡Ya lo tengo!</button>${zoomBtn}
+        <button class="btn btn-ghost sq" data-act="altImages" aria-label="Elegir otra imagen">${I.images}</button>
+        <button class="btn btn-danger sq" data-act="remove" aria-label="Quitar de la lista de deseos">${I.trash}</button></div>`;
     } else {
-      actions = `<div class="row"><button class="btn btn-amber" data-act="toggleFace">${I.flip}${it.face ? 'Guardar de lado' : 'Poner de frente'}</button>
-        <button class="btn btn-danger" data-act="remove" style="flex:0 0 auto" aria-label="Quitar de mi colección">${I.trash}</button></div>`;
+      actions = `<div class="row"><button class="btn btn-amber" data-act="toggleFace">${I.flip}${it.face ? 'De lado' : 'De frente'}</button>${zoomBtn}
+        <button class="btn btn-ghost sq" data-act="altImages" aria-label="Elegir otra imagen">${I.images}</button>
+        <button class="btn btn-danger sq" data-act="remove" aria-label="Quitar de mi colección">${I.trash}</button></div>`;
     }
+    const gl = itemGenres(it);
+    const genreRow = `<div class="genre-row">${gl.map((g) => `<span class="gchip">${esc(g)}</span>`).join('')}${d.readOnly ? '' : `<button class="gchip edit" data-act="editGenres">${I.tag}${gl.length ? 'Editar' : 'Añadir género'}</button>`}</div>`;
 
     return `<div class="layer detail" role="dialog" aria-modal="true" aria-label="${esc(it.title)}">
       <div class="layer-head"><div style="display:flex;flex-direction:column;gap:6px;min-width:0">
         <span class="chip" style="background:${p.caseColor};color:${p.bandText}">${p.label}</span>
-        <h2>${esc(it.title)}${it.year ? ` <span style="font-weight:600;font-size:16px;color:var(--soft)">${esc(it.year)}</span>` : ''}</h2></div>
+        <h2>${esc(it.title)}${it.year ? ` <span style="font-weight:600;font-size:16px;color:var(--soft)">${esc(it.year)}</span>` : ''}</h2>${genreRow}</div>
         <button class="icon-btn" data-act="closeLayer" aria-label="Devolver a la estantería">${I.close}</button></div>
       <div class="stage" id="stage" style="${caseVar}">
         <div class="scene ${d.view === 'inside' ? 'hidden' : ''}" id="scene">
@@ -391,7 +476,8 @@
       if (!state.detail || state.detail.view === 'inside') return;
       const box = document.getElementById('box'); if (!box) return;
       box.classList.remove('anim');
-      fx.drag = { x: e.clientX, y: e.clientY, rx: fx.rx, ry: fx.ry, t: performance.now(), vx: 0, lx: e.clientX };
+      fx.drag = { x: e.clientX, y: e.clientY, rx: fx.rx, ry: fx.ry, t: performance.now(), t0: performance.now(), vx: 0, lx: e.clientX };
+      fx.dragMoved = false;
       stage.setPointerCapture(e.pointerId);
     });
     stage.addEventListener('pointermove', (e) => {
@@ -399,6 +485,7 @@
       const dx = e.clientX - fx.drag.x; const dy = e.clientY - fx.drag.y;
       const now = performance.now();
       fx.drag.vx = (e.clientX - fx.drag.lx) / Math.max(1, now - fx.drag.t); fx.drag.lx = e.clientX; fx.drag.t = now;
+      if (Math.abs(dx) + Math.abs(dy) > 8) fx.dragMoved = true;
       fx.ry = fx.drag.ry + dx * 0.55;
       fx.rx = Math.max(-35, Math.min(35, fx.drag.rx - dy * 0.35));
       if (Math.abs(dx) > 6 && !fx.moved) { fx.moved = true; const h = document.getElementById('dragHint'); if (h) h.style.opacity = '0'; }
@@ -408,7 +495,9 @@
       if (!fx.drag) return;
       const box = document.getElementById('box');
       const fling = fx.drag.vx * 110; // pequeño impulso al soltar
+      const wasTap = !fx.dragMoved && performance.now() - fx.drag.t0 < 350;
       fx.drag = null;
+      if (wasTap) { openViewer(); return; }
       if (box && Math.abs(fling) > 8) { box.classList.add('anim'); fx.ry += Math.max(-70, Math.min(70, fling)); }
       applyBox();
     };
@@ -452,6 +541,242 @@
     $layers.innerHTML = '';
   }
 
+  // ---------- Capas sobre el detalle (visor, imágenes, géneros) ----------
+  function openSub(html, cls) {
+    const div = document.createElement('div');
+    div.className = `layer sub ${cls || ''}`;
+    div.setAttribute('role', 'dialog'); div.setAttribute('aria-modal', 'true');
+    div.innerHTML = html;
+    $layers.appendChild(div);
+    return div;
+  }
+  function closeSub() { const subs = $layers.querySelectorAll('.sub'); if (subs.length) subs[subs.length - 1].remove(); }
+
+  // Versiones grandes de cada imagen para el visor
+  function hq(u) {
+    if (!u) return u;
+    return u.replace('/t/p/w500/', '/t/p/original/').replace(/\/(cover|back|coverfull)M\//, '/$1HQ/');
+  }
+  function viewerSlides(it) {
+    const p = PLAT[it.plat]; const s = [];
+    if (it.front) s.push(['Portada', it.front]);
+    if (it.back) s.push(['Contraportada', it.back]);
+    if (it.full) s.push(['Portada completa', it.full]);
+    if (it.media) s.push([p.media === 'disc' ? 'Disco' : 'Cartucho', it.media]);
+    return s;
+  }
+  function openViewer() {
+    if (!state.detail) return;
+    const sl = viewerSlides(state.detail.item);
+    if (!sl.length) { toast('Esta caja no tiene imágenes para ampliar'); return; }
+    const el = openSub(`<div class="v-top"><span id="vLabel">${esc(sl[0][0])} · 1/${sl.length}</span>
+        <button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="v-track" id="vTrack">${sl.map(([n, u]) => `<div class="v-slide"><div class="v-zoom"><img src="${esc(hq(u))}" data-fallback="${esc(u)}" alt="${esc(n)}" draggable="false"></div></div>`).join('')}</div>
+      <div class="v-dots" aria-hidden="true">${sl.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>
+      <p class="v-hint">${sl.length > 1 ? 'Desliza para ver más · ' : ''}pellizca o toca dos veces para ampliar</p>`, 'viewer');
+    el.querySelectorAll('img[data-fallback]').forEach((img) => { img.onerror = () => { if (img.src !== img.dataset.fallback) img.src = img.dataset.fallback; }; });
+    const track = el.querySelector('#vTrack');
+    track.addEventListener('scroll', () => {
+      const i = Math.round(track.scrollLeft / track.clientWidth);
+      const lab = el.querySelector('#vLabel'); if (lab && sl[i]) lab.textContent = `${sl[i][0]} · ${i + 1}/${sl.length}`;
+      el.querySelectorAll('.v-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+    }, { passive: true });
+    el.querySelectorAll('.v-zoom').forEach((z) => bindZoom(z, track));
+  }
+  function bindZoom(z, track) {
+    const img = z.querySelector('img');
+    const st = { s: 1, x: 0, y: 0, pts: new Map(), d0: 0, s0: 1, lastTap: 0, px: 0, py: 0 };
+    const apply = () => {
+      img.style.transform = `translate(${st.x}px, ${st.y}px) scale(${st.s})`;
+      const zoomed = st.s > 1.02; z.classList.toggle('zoomed', zoomed); track.classList.toggle('locked', zoomed);
+    };
+    const reset = () => { st.s = 1; st.x = 0; st.y = 0; img.style.transition = 'transform .25s'; apply(); setTimeout(() => { img.style.transition = ''; }, 260); };
+    z.addEventListener('pointerdown', (e) => {
+      st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (st.pts.size === 2) {
+        const [a, b] = [...st.pts.values()];
+        st.d0 = Math.hypot(a.x - b.x, a.y - b.y); st.s0 = st.s;
+        z.setPointerCapture(e.pointerId);
+      } else if (st.pts.size === 1) {
+        st.px = e.clientX; st.py = e.clientY;
+        const now = performance.now();
+        if (now - st.lastTap < 300) {
+          if (st.s > 1.02) reset(); else { st.s = 2.6; img.style.transition = 'transform .25s'; apply(); setTimeout(() => { img.style.transition = ''; }, 260); }
+          st.lastTap = 0;
+        } else st.lastTap = now;
+        if (st.s > 1.02) z.setPointerCapture(e.pointerId);
+      }
+    });
+    z.addEventListener('pointermove', (e) => {
+      if (!st.pts.has(e.pointerId)) return;
+      st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (st.pts.size === 2) {
+        const [a, b] = [...st.pts.values()];
+        st.s = Math.max(1, Math.min(5, st.s0 * Math.hypot(a.x - b.x, a.y - b.y) / (st.d0 || 1)));
+        apply();
+      } else if (st.s > 1.02) {
+        st.x += e.clientX - st.px; st.y += e.clientY - st.py; st.px = e.clientX; st.py = e.clientY;
+        const lim = (z.clientWidth * (st.s - 1)) / 2; const limY = (z.clientHeight * (st.s - 1)) / 2;
+        st.x = Math.max(-lim, Math.min(lim, st.x)); st.y = Math.max(-limY, Math.min(limY, st.y));
+        apply();
+      }
+    });
+    const up = (e) => { st.pts.delete(e.pointerId); if (!st.pts.size && st.s <= 1.02) reset(); };
+    z.addEventListener('pointerup', up); z.addEventListener('pointercancel', up);
+  }
+
+  // ---------- Elegir otra imagen ----------
+  const LANG_NAME = { ES: 'España', EN: 'Europa (inglés)', US: 'EE. UU.', FR: 'Francia', DE: 'Alemania', IT: 'Italia' };
+  let imgFiles = {};
+  async function loadImageList(plat) {
+    if (!imgFiles[plat]) {
+      imgFiles[plat] = fetch(`data/images-${plat}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    }
+    return imgFiles[plat];
+  }
+  async function altCandidates(it) {
+    const out = { front: [], back: [], media: [] };
+    const push = (k, url, label, big) => { if (url && !out[k].some((c) => c.url === url)) out[k].push({ url, label, big: big || url }); };
+    const ref = String(it.ref);
+    if (ref.startsWith('t:')) {
+      let g = null; try { g = await findGame(it.plat, ref); } catch (e) { g = null; }
+      const ids = [ref.slice(2)].concat(((g && g.editions) || []).map((e) => e[0])).slice(0, 4);
+      const sys = TDB_SYS[it.plat]; const jobs = [];
+      for (const id of ids) {
+        for (const l of ['ES', 'EN', 'US', 'FR', 'DE', 'IT']) {
+          const base = `https://art.gametdb.com/${sys}`;
+          const lab = `${LANG_NAME[l]}${id !== ids[0] ? ` · ${id}` : ''}`;
+          jobs.push(probe(`${base}/coverM/${l}/${id}.jpg`).then((u) => u && push('front', u, lab, `${base}/coverHQ/${l}/${id}.jpg`)));
+          jobs.push(probe(`${base}/backM/${l}/${id}.jpg`).then((u) => u && push('back', u, lab, `${base}/backHQ/${l}/${id}.jpg`)));
+          jobs.push(probe(`${base}/cart/${l}/${id}.png`).then((u) => u && push('media', u, lab)));
+        }
+      }
+      await Promise.all(jobs);
+    } else if (typeof it.ref === 'number' || /^\d+$/.test(ref)) {
+      const list = (await loadImageList(it.plat))[ref] || [];
+      list.forEach(([code, region, file]) => push(code === 'f' ? 'front' : code === 'b' ? 'back' : 'media', imgUrl(file), region || 'Sin región'));
+    } else if (ref.startsWith('tmdb:')) {
+      const [, type, id] = ref.split(':');
+      try {
+        const r = await fetch(`https://api.themoviedb.org/3/${type}/${id}/images?` + new URLSearchParams({ api_key: TMDB_KEY, include_image_language: 'es,en,null' }));
+        const j = await r.json();
+        (j.posters || []).slice(0, 24).forEach((p) => push('front', 'https://image.tmdb.org/t/p/w185' + p.file_path, p.iso_639_1 === 'es' ? 'Español' : p.iso_639_1 === 'en' ? 'Inglés' : 'Sin texto', 'https://image.tmdb.org/t/p/w500' + p.file_path));
+      } catch (e) { /* sin conexión */ }
+    }
+    [['front', it.front], ['back', it.back], ['media', it.media]].forEach(([k, u]) => { if (u && !out[k].some((c) => c.big === u || c.url === u)) out[k].unshift({ url: u, label: 'La actual', big: u }); });
+    return out;
+  }
+  let altList = [];
+  async function openAlt() {
+    const it = state.detail.item; const p = PLAT[it.plat];
+    const el = openSub(`<div class="layer-head"><h2>Elegir otra imagen</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll alt-body"><p class="hint">Buscando todas las versiones en los catálogos…</p></div>`, 'sheet');
+    const c = await altCandidates(it);
+    if (!el.isConnected) return;
+    altList = [];
+    const sec = (k, title) => {
+      if (!c[k].length) return '';
+      return `<h3 class="alt-h">${title}</h3><div class="alt-strip">${c[k].map((x) => {
+        altList.push({ k, big: x.big });
+        const cur = it[k] === x.big || it[k] === x.url;
+        return `<button class="alt ${cur ? 'cur' : ''}" data-act="altPick" data-i="${altList.length - 1}" aria-label="${esc(title)}: ${esc(x.label)}"><img src="${esc(x.url)}" alt="" loading="lazy"><small>${esc(x.label)}</small></button>`;
+      }).join('')}</div>`;
+    };
+    const html = sec('front', 'Portada') + sec('back', 'Contraportada') + sec('media', p.media === 'disc' ? 'Disco' : 'Cartucho');
+    el.querySelector('.alt-body').innerHTML = html
+      ? `<p class="hint">Toca la que coincida con tu caja. Se guarda al momento.</p>${html}`
+      : `<p class="hint">No hay más imágenes de esta caja en los catálogos.${String(it.ref).startsWith('w:') ? ' Viene de Wikipedia, que solo tiene la portada.' : ''}</p>`;
+  }
+  async function pickAlt(i) {
+    const a = altList[i]; const d = state.detail; if (!a || !d) return;
+    const it = state.items.find((x) => x.uid === d.item.uid); if (!it) return;
+    let url = a.big;
+    if (url.includes('art.gametdb.com') && !(await probe(url))) url = url.replace(/\/(cover|back)HQ\//, '/$1M/');
+    it[a.k] = url;
+    if (a.k === 'back') it.full = it.full || null;
+    saveItems(); cacheImgs([url]);
+    d.item = it; closeSub(); rerenderDetail(); render();
+    toast('Imagen cambiada');
+  }
+
+  // ---------- Géneros y etiquetas ----------
+  const GAME_GENRES = ['Acción', 'Aventura', 'Rol', 'Plataformas', 'Puzle', 'Carreras', 'Deportes', 'Lucha', 'Disparos', 'Estrategia', 'Simulación', 'Party', 'Música', 'Terror', 'Sigilo', 'Educativo', 'Arcade'];
+  const MOVIE_GENRES = ['Acción', 'Aventura', 'Animación', 'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 'Fantasía', 'Historia', 'Terror', 'Música', 'Misterio', 'Romance', 'Ciencia ficción', 'Suspense', 'Bélica', 'Western'];
+  const TMDB_GENRES = { 28: 'Acción', 12: 'Aventura', 16: 'Animación', 35: 'Comedia', 80: 'Crimen', 99: 'Documental', 18: 'Drama', 10751: 'Familia', 14: 'Fantasía', 36: 'Historia', 27: 'Terror', 10402: 'Música', 9648: 'Misterio', 10749: 'Romance', 878: 'Ciencia ficción', 53: 'Suspense', 10752: 'Bélica', 37: 'Western', 10759: 'Acción', 10765: 'Ciencia ficción', 10768: 'Bélica', 10762: 'Familia' };
+  let gSel = [];
+  function genreSheetHTML(it) {
+    const base = it.kind === 'movie' ? MOVIE_GENRES : GAME_GENRES;
+    const mine = state.items.filter((x) => x.kind === it.kind).flatMap(itemGenres);
+    const all = [...new Set(base.concat(mine, gSel))];
+    return `<div class="layer-head"><h2>Géneros y etiquetas</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll"><p class="hint">Marca los que encajen. Son tuyos: sirven para filtrar tu estantería.</p>
+      <div class="chips wrap" id="gChips">${all.map((g) => `<button data-act="gToggle" data-id="${esc(g)}" aria-pressed="${gSel.includes(g)}">${esc(g)}</button>`).join('')}</div>
+      <div class="field"><label for="gNew">Crear una etiqueta propia</label><div class="row"><input id="gNew" maxlength="24" placeholder="Por ejemplo: Cooperativo"><button class="btn btn-ghost" data-act="gAdd" style="flex:0 0 auto">Añadir</button></div></div>
+      <button class="btn btn-amber" data-act="gSave" style="height:50px">Guardar</button></div>`;
+  }
+  function openGenres() {
+    const it = state.detail.item; gSel = itemGenres(it).slice();
+    openSub(genreSheetHTML(it), 'sheet');
+  }
+  function refreshGenres() { const el = $layers.querySelector('.sub.sheet:last-child'); if (el) el.innerHTML = genreSheetHTML(state.detail.item); }
+
+  // ---------- Estadísticas ----------
+  function statsHTML() {
+    const own = owned(); const wish = state.items.filter((i) => i.wish);
+    const byPlat = Object.keys(PLAT).map((k) => [k, own.filter((i) => i.plat === k).length]).filter((x) => x[1]).sort((a, b) => b[1] - a[1]);
+    const maxP = Math.max(1, ...byPlat.map((x) => x[1]));
+    const gCount = {}; own.forEach((i) => itemGenres(i).forEach((g) => { gCount[g] = (gCount[g] || 0) + 1; }));
+    const topG = Object.entries(gCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const year = new Date().getFullYear();
+    const thisYear = own.filter((i) => i.added && new Date(i.added).getFullYear() === year).length;
+    const oldest = own.filter((i) => i.year).sort((a, b) => a.year - b.year)[0];
+    const friendsC = state.friends.map((f) => [f.name, f.items.filter((i) => !i.wish && ownMatch(i)).length]).sort((a, b) => b[1] - a[1]);
+    const bar = (label, n, max) => `<div class="bar"><span>${esc(label)}</span><i style="width:${Math.max(6, Math.round((n / max) * 100))}%"></i><b>${n}</b></div>`;
+    return `<div class="layer sheet" role="dialog" aria-modal="true" aria-label="Estadísticas">
+      <div class="layer-head"><h2>Tu colección en números</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll">
+        <div class="stat-grid">
+          <div class="stat"><b>${own.filter((i) => i.kind === 'game').length}</b><span>juegos</span></div>
+          <div class="stat"><b>${own.filter((i) => i.kind === 'movie').length}</b><span>películas</span></div>
+          <div class="stat"><b>${thisYear}</b><span>añadidos en ${year}</span></div>
+          <div class="stat"><b>${wish.length}</b><span>en deseos</span></div>
+        </div>
+        ${byPlat.length ? `<div class="card"><h3>Por formato</h3>${byPlat.map(([k, n]) => bar(PLAT[k].short, n, maxP)).join('')}</div>` : ''}
+        ${topG.length ? `<div class="card"><h3>Géneros favoritos</h3>${topG.map(([g, n]) => bar(g, n, topG[0][1])).join('')}</div>` : ''}
+        ${oldest ? `<div class="card"><h3>La más veterana</h3><p>${esc(oldest.title)} (${esc(oldest.year)}, ${esc(PLAT[oldest.plat].short)})</p></div>` : ''}
+        ${friendsC.length && friendsC[0][1] ? `<div class="card"><h3>Con quién compartes gustos</h3><p>${friendsC.filter((f) => f[1]).slice(0, 3).map(([n, c]) => `${esc(n)}: ${c} en común`).join('<br>')}</p></div>` : ''}
+      </div></div>`;
+  }
+
+  // ---------- Puesta al día de cajas antiguas (géneros y contraportadas) ----------
+  async function upgradeItems() {
+    let changed = false;
+    for (const it of state.items) {
+      const ref = String(it.ref);
+      try {
+        if (it.kind === 'game' && (it.genres === undefined || (ref.startsWith('t:') && !it.v4))) {
+          const g = await findGame(it.plat, ref).catch(() => null);
+          if (it.genres === undefined) { it.genres = (g && g.genres) || []; changed = true; }
+          if (ref.startsWith('t:') && !it.v4 && g) {
+            const r = await resolveTdb(g);
+            ['front', 'back', 'full', 'media'].forEach((k) => { if (!it[k] && r[k]) { it[k] = r[k]; changed = true; } });
+            it.v4 = true; changed = true;
+            cacheImgs([it.back, it.full, it.media]);
+          }
+        } else if (it.kind === 'movie' && it.genres === undefined) {
+          it.genres = [];
+          if (ref.startsWith('tmdb:')) {
+            const [, type, id] = ref.split(':');
+            const j = await fetch(`https://api.themoviedb.org/3/${type}/${id}?` + new URLSearchParams({ api_key: TMDB_KEY, language: 'es-ES' })).then((r) => r.json());
+            it.genres = [...new Set((j.genres || []).map((x) => TMDB_GENRES[x.id]).filter(Boolean))];
+          }
+          changed = true;
+        } else if (it.genres === undefined) { it.genres = []; changed = true; }
+      } catch (e) { /* lo intentamos la próxima vez */ }
+    }
+    if (changed) { saveItems(); if (!state.layer) render(); }
+  }
+
   // ---------- Catálogo de juegos ----------
   const index = {};
   function loadPlat(plat) {
@@ -468,17 +793,20 @@
   }
   function gameFromRow(plat, g) {
     if (typeof g[0] === 'string' && g[0].startsWith('t:')) {
-      return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2) };
+      return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2), genres: g[8] || [], editions: g[9] || [] };
     }
-    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null };
+    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null, genres: g[8] || [] };
   }
 
   // ---------- Imágenes de GameTDB (se buscan al añadir) ----------
   const TDB_SYS = { ds: 'ds', '3ds': '3ds', switch: 'switch', switch2: 'switch2' };
-  const K_FRONT = [['coverHQ', 'jpg'], ['coverM', 'png'], ['cover', 'png'], ['coverM', 'jpg'], ['cover', 'jpg']];
-  const K_THUMB = [['cover', 'png'], ['coverM', 'png'], ['cover', 'jpg'], ['coverHQ', 'jpg']];
-  const K_FULL = [['coverfullHQ', 'jpg'], ['coverfull', 'jpg'], ['coverfullM', 'jpg'], ['coverfull', 'png']];
-  const K_MEDIA = [['cart', 'png'], ['cartHQ', 'png'], ['disc', 'png']];
+  // Nombres comprobados en art.gametdb.com: coverHQ/coverM/cover (.jpg), backHQ/backM/back (.jpg),
+  // coverfullHQ/coverfullM/coverfull (.jpg) y cart (.png)
+  const K_FRONT = [['coverHQ', 'jpg'], ['coverM', 'jpg'], ['cover', 'jpg'], ['coverHQ', 'png'], ['coverM', 'png'], ['cover', 'png']];
+  const K_THUMB = [['cover', 'jpg'], ['coverM', 'jpg'], ['cover', 'png']];
+  const K_BACK = [['backHQ', 'jpg'], ['backM', 'jpg'], ['back', 'jpg']];
+  const K_FULL = [['coverfullHQ', 'jpg'], ['coverfullM', 'jpg'], ['coverfull', 'jpg']];
+  const K_MEDIA = [['cart', 'png'], ['cartHQ', 'png']];
   function tdbLangs(reg) {
     return ({ ES: ['ES', 'EN', 'US'], EU: ['EN', 'ES', 'US'], WW: ['ES', 'EN', 'US'], US: ['US', 'EN'], JP: ['JA', 'EN'], DE: ['DE', 'EN'], FR: ['FR', 'EN'], IT: ['IT', 'EN'], NL: ['NL', 'EN'], AU: ['AU', 'EN'], KR: ['KO', 'EN'] })[reg] || ['EN', 'ES', 'US'];
   }
@@ -503,8 +831,8 @@
     return null;
   }
   async function resolveTdb(r) {
-    const [front, full, media] = await Promise.all([firstOk(tdbCands(r, K_FRONT)), firstOk(tdbCands(r, K_FULL), true), firstOk(tdbCands(r, K_MEDIA))]);
-    return Object.assign({}, r, { front, full, media });
+    const [front, back, full, media] = await Promise.all([firstOk(tdbCands(r, K_FRONT)), firstOk(tdbCands(r, K_BACK)), firstOk(tdbCands(r, K_FULL), true), firstOk(tdbCands(r, K_MEDIA))]);
+    return Object.assign({}, r, { front, back, full, media });
   }
   function hydrateThumbs(root) {
     root.querySelectorAll('img[data-cands]').forEach((img) => {
@@ -553,7 +881,8 @@
       return {
         ref: `tmdb:${m.media_type}:${m.id}`, title, year: Number(date.slice(0, 4)) || null,
         desc: [m.media_type === 'tv' ? 'Serie' : 'Película', date.slice(0, 4), orig && orig !== title ? orig : ''].filter(Boolean).join(' · '),
-        front: m.poster_path ? 'https://image.tmdb.org/t/p/w500' + m.poster_path : null, back: null, media: null
+        front: m.poster_path ? 'https://image.tmdb.org/t/p/w500' + m.poster_path : null, back: null, media: null,
+        genres: [...new Set((m.genre_ids || []).map((g) => TMDB_GENRES[g]).filter(Boolean))]
       };
     });
   }
@@ -607,13 +936,14 @@
   }
 
   // ---------- Añadir ----------
-  function countFace(collId) { return state.items.filter((i) => PLAT[i.plat].coll === collId && i.face).length; }
+  function countFace(collId) { return state.items.filter((i) => !i.wish && PLAT[i.plat].coll === collId && i.face).length; }
 
-  function addItem(r, kind, plat) {
+  function addItem(r, kind, plat, wish) {
     if (state.items.find((m) => m.kind === kind && m.plat === plat && String(m.ref) === String(r.ref))) return false;
     const it = {
       uid: uid(), kind, plat, ref: r.ref, title: r.title, year: r.year || null,
       front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null,
+      genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, v4: true,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
     state.items.push(it);
@@ -642,6 +972,7 @@
     return `<div class="layer sheet" role="dialog" aria-modal="true" aria-label="Añadir a la colección">
       <div class="layer-head"><h2>Añadir a la estantería</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
       <div class="body">
+        <div class="modes" role="group" aria-label="Dónde añadirlo"><button data-act="addWish" data-id="0" aria-pressed="${!a.wish}">Lo tengo</button><button data-act="addWish" data-id="1" aria-pressed="${!!a.wish}">${I.heart}Lo quiero</button></div>
         <div class="pills" role="group" aria-label="Colección">${COLLS.map((c) => `<button data-act="addColl" data-id="${c.id}" aria-pressed="${c.id === coll.id}">${esc(c.name)}</button>`).join('')}</div>
         ${isMovie ? `<div class="pills" role="group" aria-label="Formato">${['dvd', 'bluray'].map((f) => `<button data-act="addFmt" data-id="${f}" aria-pressed="${a.fmt === f}">${PLAT[f].short}</button>`).join('')}</div>` : ''}
         <label class="search">${I.search}<span class="sr">Título</span>
@@ -667,7 +998,7 @@
       const meta = isMovie ? esc(r.desc) : `${esc(PLAT[r.plat].short)}${r.year ? ' · ' + esc(r.year) : ''}${r.region ? ' · ' + esc(REGION_NAME[r.region] || r.region) : ''}`;
       return `<button class="result ${owned ? 'owned' : ''}" data-act="pick" data-i="${i}">${thumb}
         <div class="info"><b>${esc(r.title)}</b><small>${meta}</small></div>
-        <span class="state">${owned ? 'En tu estantería' : 'Añadir'}</span></button>`;
+        <span class="state">${owned ? (owned.wish ? 'En tus deseos' : 'En tu estantería') : 'Añadir'}</span></button>`;
     }).join('');
   }
 
@@ -695,7 +1026,7 @@
   const runSearchSoon = debounce(runSearch, 250);
 
   function openAdd(collId) {
-    state.add = { coll: collId || state.tab, fmt: (state.add && state.add.fmt) || 'bluray', q: '' };
+    state.add = { coll: collId || state.tab, fmt: (state.add && state.add.fmt) || 'bluray', q: '', wish: state.mode === 'wish' };
     state.layer = 'add';
     $layers.innerHTML = addHTML();
     const q = document.getElementById('q');
@@ -807,15 +1138,17 @@
     const payload = {
       v: 1, n: state.name || 'Un amigo',
       i: state.items.map((it) => {
-        if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0];
-        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back)];
-        return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.ref)];
+        const w = it.wish ? 1 : 0; const g = itemGenres(it);
+        if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0, w, g];
+        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g];
+        return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.ref), w, g];
       })
     };
     const raw = new TextEncoder().encode(JSON.stringify(payload));
     if ('CompressionStream' in window) return 'd' + b64url(await streamBytes(raw, window.CompressionStream));
     return 'j' + b64url(raw);
   }
+  const cleanG = (g) => (Array.isArray(g) ? g.filter((x) => typeof x === 'string').map((x) => x.slice(0, 24)).slice(0, 8) : null);
   async function decodeShare(s) {
     let bytes = unb64url(s.slice(1));
     if (s[0] === 'd') bytes = await streamBytes(bytes, window.DecompressionStream);
@@ -830,11 +1163,11 @@
       if (!Array.isArray(x) || !PLAT[x[1]]) continue;
       if (x[0] === 0) {
         let g = null; try { g = await findGame(x[1], x[2]); } catch (e) { g = null; }
-        if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g));
+        if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g, { wish: !!x[4], genres: cleanG(x[5]) || g.genres || [] }));
       } else if (x[0] === 1 && PLAT[x[1]].coll === 'mov') {
-        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5] });
+        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [] });
       } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov') {
-        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8] });
+        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [] });
       }
     }
     return { name, items };
@@ -870,6 +1203,9 @@
     history.replaceState(null, '', location.pathname + location.search);
     try {
       const { name, items } = await decodeShare(m[1]);
+      await Promise.all(items.filter((i) => String(i.ref).startsWith('t:') && !i.front && !i.full).slice(0, 60).map(async (i) => {
+        const g = await findGame(i.plat, i.ref).catch(() => null); if (g) { const r = await resolveTdb(g); Object.assign(i, { front: r.front, back: r.back, full: r.full, media: r.media }); }
+      }));
       const id = norm(name) || uid();
       const prev = state.friends.findIndex((f) => f.id === id);
       const entry = { id, name, items, received: Date.now() };
@@ -915,7 +1251,7 @@
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
           uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, added: i.added || Date.now()
+          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, v4: !!i.v4, added: i.added || Date.now()
         }));
         state.items = clean; saveItems();
         if (Array.isArray(j.friends)) {
@@ -923,7 +1259,7 @@
             id: String(f.id), name: String(f.name || 'Amigo').slice(0, 40), received: Number(f.received) || Date.now(),
             items: f.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
               uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face
+              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || []
             }))
           }));
           saveFriends();
@@ -942,8 +1278,8 @@
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act; const id = el.dataset.id;
     switch (act) {
-      case 'tab': state.tab = id; LS.set('ludo.tab', id); render(); $content.scrollTop = 0; break;
-      case 'mode': state.mode = id; render(); break;
+      case 'tab': state.tab = id; LS.set('ludo.tab', id); state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
+      case 'mode': state.mode = id; state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
       case 'open': {
         const it = shownItems().find((x) => x.uid === el.dataset.uid);
         if (it) { removeArmed = false; openDetail(it, !!state.friendId); }
@@ -963,11 +1299,40 @@
         closeLayer(); render(); toast('Quitado de tu estantería');
         break;
       }
-      case 'copyToMine': {
-        const it = state.detail.item;
-        if (addItem(it, it.kind, it.plat)) { toast('Añadido a tu estantería'); rerenderDetail(); }
+      case 'copyToMine':
+      case 'copyToWish': {
+        const it = state.detail.item; const w = act === 'copyToWish';
+        if (addItem(it, it.kind, it.plat, w)) { toast(w ? 'Añadido a tus deseos' : 'Añadido a tu estantería'); rerenderDetail(); }
+        else toast('Ya lo tienes apuntado');
         break;
       }
+      case 'gotIt': {
+        const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
+        it.wish = false; it.added = Date.now(); it.face = countFace(PLAT[it.plat].coll) < 4; saveItems();
+        closeLayer(); state.mode = 'mine'; render(); toast(`¡${it.title} ya está en tu estantería!`);
+        break;
+      }
+      case 'viewer': openViewer(); break;
+      case 'altImages': openAlt(); break;
+      case 'altPick': pickAlt(Number(el.dataset.i)); break;
+      case 'closeSub': closeSub(); break;
+      case 'editGenres': openGenres(); break;
+      case 'gToggle': { const g = el.dataset.id; gSel = gSel.includes(g) ? gSel.filter((x) => x !== g) : gSel.concat(g); el.setAttribute('aria-pressed', String(gSel.includes(g))); break; }
+      case 'gAdd': {
+        const inp = document.getElementById('gNew'); const v = (inp && inp.value || '').trim().slice(0, 24);
+        if (v) { const nice = v[0].toUpperCase() + v.slice(1); if (!gSel.includes(nice)) gSel.push(nice); refreshGenres(); }
+        break;
+      }
+      case 'gSave': {
+        const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
+        it.genres = gSel.slice(0, 8); saveItems(); state.detail.item = it; closeSub(); rerenderDetail(); render(); toast('Géneros guardados');
+        break;
+      }
+      case 'addWish': state.add.wish = id === '1'; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
+      case 'friendWish': state.friendWish = id === '1'; state.filter.genre = ''; state.filter.notMine = false; render(); break;
+      case 'genre': state.filter.genre = id; state.filter.notMine = false; render(); break;
+      case 'notMine': state.filter.notMine = !state.filter.notMine; render(); break;
+      case 'stats': state.layer = 'stats'; $layers.innerHTML = statsHTML(); break;
       case 'add': openAdd(state.tab); break;
       case 'addColl': state.add.coll = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'addFmt': state.add.fmt = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
@@ -981,10 +1346,11 @@
           r = await resolveTdb(r);
           if (!state.add) break;
         }
-        if (addItem(r, isMovie ? 'movie' : 'game', plat)) {
-          el.classList.add('owned'); el.querySelector('.state').textContent = 'En tu estantería';
-          state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = 'mine'; state.friendId = null; render();
-          toast(`${r.title} ya está en tu estantería`);
+        const wish = !!state.add.wish;
+        if (addItem(r, isMovie ? 'movie' : 'game', plat, wish)) {
+          el.classList.add('owned'); el.querySelector('.state').textContent = wish ? 'En tus deseos' : 'En tu estantería';
+          state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = wish ? 'wish' : 'mine'; state.friendId = null; render();
+          toast(wish ? `${r.title} añadido a tus deseos` : `${r.title} ya está en tu estantería`);
         } else toast('Ya lo tienes en la estantería');
         break;
       }
@@ -1002,9 +1368,10 @@
       }
       case 'pickWiki': {
         const r = lastResults[Number(el.dataset.i)]; const plat = el.dataset.plat; if (!r || !PLAT[plat]) break;
-        if (addItem(r, 'game', plat)) {
+        const wishW = !!state.add.wish;
+        if (addItem(r, 'game', plat, wishW)) {
           el.closest('.result').classList.add('owned');
-          state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = 'mine'; state.friendId = null; render();
+          state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = wishW ? 'wish' : 'mine'; state.friendId = null; render();
           toast(`${r.title} ya está en tu estantería`);
         } else toast('Ya lo tienes en la estantería');
         break;
@@ -1017,7 +1384,7 @@
       case 'export': exportBackup(); break;
       case 'import': { const f = document.getElementById('importFile'); f.onchange = () => f.files[0] && importBackup(f.files[0]); f.click(); break; }
       case 'install': if (installPrompt) { installPrompt.prompt(); installPrompt = null; closeLayer(); } break;
-      case 'openFriend': state.friendId = id; { const f = currentFriend(); const c = f && COLLS.find((cc) => f.items.some((i) => PLAT[i.plat].coll === cc.id)); if (c) state.tab = c.id; } render(); $content.scrollTop = 0; break;
+      case 'openFriend': state.friendId = id; state.friendWish = false; state.filter = Object.assign(state.filter, { q: '', genre: '', notMine: false }); { const f = currentFriend(); const c = f && COLLS.find((cc) => f.items.some((i) => PLAT[i.plat].coll === cc.id)); if (c) state.tab = c.id; } render(); $content.scrollTop = 0; break;
       case 'closeFriend': state.friendId = null; state.mode = 'friends'; render(); break;
       case 'removeFriend': {
         if (el.dataset.armed) { state.friends = state.friends.filter((f) => f.id !== id); saveFriends(); render(); }
@@ -1027,7 +1394,7 @@
       default: break;
     }
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.layer) closeLayer(); });
+  document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if ($layers.querySelector('.sub')) closeSub(); else if (state.layer) closeLayer(); });
   window.addEventListener('resize', debounce(() => { render(); if (state.layer === 'detail') rerenderDetail(); }, 200));
   window.addEventListener('hashchange', receiveFromHash);
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
@@ -1040,6 +1407,7 @@
     } catch (e) { /* sin conexión: usamos lo guardado */ }
     render();
     receiveFromHash();
+    setTimeout(upgradeItems, 800);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
