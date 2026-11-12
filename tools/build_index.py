@@ -164,6 +164,7 @@ def main():
     ap.add_argument("--img-base", help="solo para pruebas: carpeta local de imágenes")
     ap.add_argument("--tdb-dir", help="solo para pruebas: carpeta con gametdb-<plat>.xml")
     ap.add_argument("--no-tdb", action="store_true", help="no usar GameTDB")
+    ap.add_argument("--previous", help="dirección de la web publicada (…/data) por si GameTDB no responde")
     args = ap.parse_args()
 
     opener = open_xml(args)
@@ -228,7 +229,7 @@ def main():
         sources[plat] = "launchbox"
         if args.no_tdb:
             continue
-        tdb_rows = gametdb.load(plat, cache=args.cache, local_dir=args.tdb_dir)
+        tdb_rows = gametdb.load(plat, cache=args.cache, local_dir=args.tdb_dir, previous=args.previous)
         if not tdb_rows:
             print(f"  {plat}: GameTDB no disponible, uso solo LaunchBox", file=sys.stderr)
             continue

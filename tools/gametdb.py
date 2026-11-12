@@ -10,10 +10,12 @@ Las imágenes NO se listan aquí: el navegador las busca en art.gametdb.com
 (portada, portada completa con contraportada y cartucho) al añadir el juego.
 """
 import io
+import json
 import os
 import re
 import sys
 import unicodedata
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
@@ -43,6 +45,9 @@ def norm(s):
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
+DEAD_HOSTS = set()  # si un servidor no responde, no insistimos con él
+
+
 def fetch(plat, cache):
     """Descarga el XML (en un zip) de GameTDB. Devuelve bytes o None."""
     _sys, names = SYSTEMS[plat]
@@ -50,9 +55,11 @@ def fetch(plat, cache):
         for name in names:
             for q in ("?LANG=ES", ""):
                 url = base + name + q
+                if base in DEAD_HOSTS:
+                    continue
                 try:
                     req = urllib.request.Request(url, headers=UA)
-                    with urllib.request.urlopen(req, timeout=180) as r:
+                    with urllib.request.urlopen(req, timeout=45) as r:
                         data = r.read()
                     if len(data) < 2000:
                         continue
@@ -70,9 +77,28 @@ def fetch(plat, cache):
                         with open(os.path.join(cache, f"gametdb-{plat}.xml"), "wb") as fh:
                             fh.write(data)
                     return data
-                except Exception as e:  # probamos la siguiente dirección
-                    print(f"  GameTDB {plat}: {url} falló ({e.__class__.__name__})", file=sys.stderr)
+                except urllib.error.HTTPError as e:  # el servidor responde: probamos otra dirección
+                    print(f"  GameTDB {plat}: {url} falló ({e.code})", file=sys.stderr)
+                except Exception as e:  # sin conexión con el servidor: no insistimos
+                    print(f"  GameTDB {plat}: {base} no responde ({e.__class__.__name__})", file=sys.stderr)
+                    DEAD_HOSTS.add(base)
     return None
+
+
+def previous_rows(plat, previous):
+    """Filas de GameTDB de la última publicación (por si hoy GameTDB no responde)."""
+    try:
+        url = previous.rstrip("/") + f"/games-{plat}.json"
+        req = urllib.request.Request(url, headers=UA)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        rows = [g for g in j.get("games", []) if isinstance(g[0], str) and g[0].startswith("t:")]
+        if rows:
+            print(f"  GameTDB {plat}: uso los {len(rows)} juegos de la publicación anterior", file=sys.stderr)
+        return rows or None
+    except Exception as e:
+        print(f"  GameTDB {plat}: tampoco hay publicación anterior ({e.__class__.__name__})", file=sys.stderr)
+        return None
 
 
 def genres_es(t):
@@ -135,8 +161,9 @@ def parse(plat, data):
     return rows
 
 
-def load(plat, cache=None, local_dir=None):
-    """Filas de GameTDB para una plataforma, o None si no se pudo descargar."""
+def load(plat, cache=None, local_dir=None, previous=None):
+    """Filas de GameTDB para una plataforma. Orden: descarga de hoy, copia
+    guardada de la última descarga buena, o lo que se publicó la última vez."""
     data = None
     if local_dir:
         p = os.path.join(local_dir, f"gametdb-{plat}.xml")
@@ -145,8 +172,14 @@ def load(plat, cache=None, local_dir=None):
                 data = fh.read()
     if data is None and not local_dir:
         data = fetch(plat, cache)
+    if not data and cache and not local_dir:
+        p = os.path.join(cache, f"gametdb-{plat}.xml")
+        if os.path.exists(p):
+            print(f"  GameTDB {plat}: uso la copia guardada de la última descarga", file=sys.stderr)
+            with open(p, "rb") as fh:
+                data = fh.read()
     if not data:
-        return None
+        return previous_rows(plat, previous) if previous else None
     try:
         return parse(plat, data)
     except ET.ParseError as e:
