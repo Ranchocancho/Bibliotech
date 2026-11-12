@@ -148,8 +148,12 @@ def parse(plat, data):
         reg = region_of(plat, gid, text(g, "region"))
         genres = genres_es(text(g, "genre"))
         alts = sorted({t for t in [en, name_attr] + list(titles.values()) if t and t != title})[:6]
-        # Agrupamos ediciones del mismo juego (mismo título en inglés)
-        key = norm(en) or norm(title)
+        # Agrupamos las ediciones del mismo juego: en DS/3DS comparten las 3
+        # primeras letras del ID; en Switch, el título en inglés sin "(Europe)"…
+        if plat in ("ds", "3ds") and len(gid) == 4:
+            key = gid[:3]
+        else:
+            key = norm(re.sub(r"\([^)]*\)", " ", en)) or norm(title)
         cand = (RANK.get(reg, 7), gid, title, year, alts, reg, genres)
         editions.setdefault(key, []).append((RANK.get(reg, 7), gid, reg))
         if key not in best or cand[0] < best[key][0]:

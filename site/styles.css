@@ -34,11 +34,12 @@ img { display: block; }
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
 .modes button { height: 36px; border: 0; border-radius: 9px; background: transparent; color: var(--soft); font-weight: 600; font-size: 14px; cursor: pointer; }
 .modes button[aria-pressed="true"] { background: var(--ink); color: #1a120c; }
-.tabs { display: flex; gap: 20px; overflow-x: auto; scrollbar-width: none; }
+.tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs button { flex: none; height: 44px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--soft); font-weight: 600; font-size: 14px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.tabs button { min-width: 0; min-height: 48px; padding: 4px 2px 6px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--soft); font-weight: 600; font-size: 13px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; align-items: center; justify-content: center; }
+.tabs .t { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--amber); }
-.tabs .n { font-size: 11px; font-weight: 700; opacity: .7; }
+.tabs .n { font-size: 11px; font-weight: 700; opacity: .75; line-height: 1; }
 .friend-banner { display: flex; align-items: center; gap: 10px; padding: 10px 0 0; }
 .friend-banner .who { font-family: var(--serif); font-weight: 700; font-size: 18px; }
 .friend-banner .when { font-size: 12px; color: var(--soft); }
@@ -268,3 +269,13 @@ img { display: block; }
 .bar i { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, #c08a55, var(--amber)); }
 .bar b { text-align: right; }
 .field .row input { flex: 1; min-width: 0; }
+
+/* Orden de estanterías */
+.order-list { display: flex; flex-direction: column; gap: 6px; }
+.order-row { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.order-row.off .o-name { opacity: .45; text-decoration: line-through; }
+.o-name { flex: 1; font-weight: 600; font-size: 15px; }
+.icon-btn.sm { width: 40px; height: 40px; }
+.icon-btn[disabled] { opacity: .3; cursor: default; }
+.o-show { display: flex; align-items: center; gap: 6px; padding: 0 6px; min-height: 40px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.o-show input { width: 20px; height: 20px; accent-color: #f2b84b; }

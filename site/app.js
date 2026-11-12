@@ -3,15 +3,17 @@
    Todo funciona en el navegador: la colección se guarda en el propio móvil. */
 (function () {
   // ---------- Plataformas y colecciones ----------
+  // Medidas reales de las cajas (ancho × alto × grosor en mm) a 0,8 px por mm:
+  // DS 134×122×15 · 3DS 134×122×12,5 · Switch 105×170×11 · PS4/PS5 135×170×14 · DVD 135×190×14 · Blu-ray 128,5×148×12
   const PLAT = {
-    ds:      { label: 'NINTENDO DS',       short: 'DS',       coll: 'nin', caseColor: '#1d1d1f', bandText: '#f2f2f2', w: 96,  h: 106, sw: 15, depth: 0.12, media: 'cart' },
-    '3ds':   { label: 'NINTENDO 3DS',      short: '3DS',      coll: 'nin', caseColor: '#ececec', bandText: '#a3121c', w: 96,  h: 106, sw: 15, depth: 0.12, media: 'cart' },
-    switch:  { label: 'NINTENDO SWITCH',   short: 'Switch',   coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, depth: 0.1, media: 'cart' },
-    switch2: { label: 'NINTENDO SWITCH 2', short: 'Switch 2', coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84,  h: 138, sw: 14, depth: 0.1, media: 'cart' },
-    ps4:     { label: 'PS4',               short: 'PS4',      coll: 'ps',  caseColor: '#1a3f8f', bandText: '#ffffff', w: 100, h: 124, sw: 16, depth: 0.1, media: 'disc' },
-    ps5:     { label: 'PS5',               short: 'PS5',      coll: 'ps',  caseColor: '#2257b8', bandText: '#ffffff', w: 100, h: 124, sw: 16, depth: 0.1, media: 'disc' },
-    dvd:     { label: 'DVD',               short: 'DVD',      coll: 'mov', caseColor: '#141414', bandText: '#dddddd', w: 90,  h: 128, sw: 15, depth: 0.1, media: 'disc' },
-    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 98,  h: 120, sw: 13, depth: 0.09, media: 'disc' }
+    ds:      { label: 'NINTENDO DS',       short: 'DS',       coll: 'nin', caseColor: '#1d1d1f', bandText: '#f2f2f2', w: 107, h: 98, sw: 15, depth: 0.112, media: 'cart' },
+    '3ds':   { label: 'NINTENDO 3DS',      short: '3DS',      coll: 'nin', caseColor: '#ececec', bandText: '#a3121c', w: 107, h: 98, sw: 13, depth: 0.093, media: 'cart' },
+    switch:  { label: 'NINTENDO SWITCH',   short: 'Switch',   coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84, h: 136, sw: 11, depth: 0.105, media: 'cart' },
+    switch2: { label: 'NINTENDO SWITCH 2', short: 'Switch 2', coll: 'sw',  caseColor: '#d4101b', bandText: '#ffffff', w: 84, h: 136, sw: 11, depth: 0.105, media: 'cart' },
+    ps4:     { label: 'PS4',               short: 'PS4',      coll: 'ps',  caseColor: '#1a3f8f', bandText: '#ffffff', w: 108, h: 136, sw: 14, depth: 0.104, media: 'disc' },
+    ps5:     { label: 'PS5',               short: 'PS5',      coll: 'ps',  caseColor: '#2257b8', bandText: '#ffffff', w: 108, h: 136, sw: 14, depth: 0.104, media: 'disc' },
+    dvd:     { label: 'DVD',               short: 'DVD',      coll: 'mov', caseColor: '#141414', bandText: '#dddddd', w: 108, h: 152, sw: 14, depth: 0.104, media: 'disc' },
+    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 103, h: 118, sw: 12, depth: 0.093, media: 'disc' }
   };
   const COLLS = [
     { id: 'nin', name: 'DS · 3DS',    full: 'Nintendo DS y 3DS',          plats: ['ds', '3ds'],         noun: ['juego', 'juegos'] },
@@ -20,6 +22,16 @@
     { id: 'mov', name: 'Películas',   full: 'DVD y Blu-ray',              plats: ['dvd', 'bluray'],     noun: ['película', 'películas'] }
   ];
   const collOf = (id) => COLLS.find((c) => c.id === id) || COLLS[1];
+  // Orden de las estanterías elegido por cada persona (se guarda en su móvil)
+  function collOrder() {
+    let o = []; try { o = JSON.parse(localStorage.getItem('ludo.order') || '[]'); } catch (e) { o = []; }
+    o = o.filter((id) => COLLS.some((c) => c.id === id));
+    COLLS.forEach((c) => { if (!o.includes(c.id)) o.push(c.id); });
+    return o;
+  }
+  function hiddenColls() { try { return JSON.parse(localStorage.getItem('ludo.hidden') || '[]'); } catch (e) { return []; } }
+  const orderedColls = () => collOrder().map(collOf);
+  const visibleColls = () => { const h = hiddenColls(); const v = orderedColls().filter((c) => !h.includes(c.id)); return v.length ? v : orderedColls(); };
   const ALLOWED_IMG = ['https://images.launchbox-app.com/', 'https://upload.wikimedia.org/', 'https://art.gametdb.com/', 'https://image.tmdb.org/'];
   // Clave gratuita de TMDB (uso personal, no comercial). Es la misma para todos.
   const TMDB_KEY = '7ae1e6e55398db1b1c344538507ad7e1';
@@ -63,6 +75,8 @@
     scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5h3M20 8V5h-3M4 16v3h3M20 16v3h-3M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="#c9a77c" stroke-width="2" stroke-linecap="round" aria-hidden="true" width="18" height="18"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
     zoom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M11 8v6M8 11h6"/></svg>',
@@ -77,7 +91,7 @@
     items: LS.get('ludo.items', []),
     friends: LS.get('ludo.friends', []),
     name: LS.get('ludo.name', ''),
-    tab: LS.get('ludo.tab', 'sw'),
+    tab: LS.get('ludo.tab', null) || 'sw',
     mode: 'mine',          // 'mine' | 'wish' | 'friends'
     friendId: null,        // estantería de amigo abierta
     friendWish: false,     // en un amigo: ver sus deseos
@@ -126,11 +140,14 @@
 
   function tabsHTML(items, coll) {
     const counts = Object.fromEntries(COLLS.map((c) => [c.id, items.filter((i) => PLAT[i.plat] && PLAT[i.plat].coll === c.id).length]));
-    return `<nav class="tabs" role="tablist" aria-label="Colecciones">${COLLS.map((c) =>
-      `<button role="tab" data-act="tab" data-id="${c.id}" aria-selected="${c.id === coll.id}">${esc(c.name)}<span class="n">${counts[c.id]}</span></button>`).join('')}</nav>`;
+    // En la estantería de un amigo se ven también las que yo oculto si él tiene algo en ellas
+    const list = state.friendId ? orderedColls().filter((c) => counts[c.id] || visibleColls().includes(c)) : visibleColls();
+    return `<nav class="tabs" role="tablist" aria-label="Colecciones" style="grid-template-columns:repeat(${list.length}, minmax(0, 1fr))">${list.map((c) =>
+      `<button role="tab" data-act="tab" data-id="${c.id}" aria-selected="${c.id === coll.id}"><span class="t">${esc(c.name)}</span><span class="n">${counts[c.id]}</span></button>`).join('')}</nav>`;
   }
 
   function render() {
+    if (!state.friendId && !visibleColls().some((c) => c.id === state.tab)) state.tab = visibleColls()[0].id;
     const friend = currentFriend();
     const items = shownItems();
     const coll = collOf(state.tab);
@@ -754,14 +771,17 @@
     for (const it of state.items) {
       const ref = String(it.ref);
       try {
-        if (it.kind === 'game' && (it.genres === undefined || (ref.startsWith('t:') && !it.v4))) {
+        const needImg = ref.startsWith('t:') && (it.imgv || 0) < 2 && (!it.back || !it.media);
+        if (it.kind === 'game' && (it.genres === undefined || needImg)) {
           const g = await findGame(it.plat, ref).catch(() => null);
-          if (it.genres === undefined) { it.genres = (g && g.genres) || []; changed = true; }
-          if (ref.startsWith('t:') && !it.v4 && g) {
+          if (it.genres === undefined || (!it.genres.length && g && g.genres && g.genres.length)) { it.genres = (g && g.genres) || it.genres || []; changed = true; }
+          if (needImg && g) {
             const r = await resolveTdb(g);
-            ['front', 'back', 'full', 'media'].forEach((k) => { if (!it[k] && r[k]) { it[k] = r[k]; changed = true; } });
-            it.v4 = true; changed = true;
-            cacheImgs([it.back, it.full, it.media]);
+            if (r.front) { // si GameTDB no responde, lo reintentamos otro día
+              ['front', 'back', 'full', 'media'].forEach((k) => { if (!it[k] && r[k]) { it[k] = r[k]; changed = true; } });
+              it.imgv = 2; changed = true;
+              cacheImgs([it.back, it.full, it.media]);
+            }
           }
         } else if (it.kind === 'movie' && it.genres === undefined) {
           it.genres = [];
@@ -808,7 +828,8 @@
   const K_FULL = [['coverfullHQ', 'jpg'], ['coverfullM', 'jpg'], ['coverfull', 'jpg']];
   const K_MEDIA = [['cart', 'png'], ['cartHQ', 'png']];
   function tdbLangs(reg) {
-    return ({ ES: ['ES', 'EN', 'US'], EU: ['EN', 'ES', 'US'], WW: ['ES', 'EN', 'US'], US: ['US', 'EN'], JP: ['JA', 'EN'], DE: ['DE', 'EN'], FR: ['FR', 'EN'], IT: ['IT', 'EN'], NL: ['NL', 'EN'], AU: ['AU', 'EN'], KR: ['KO', 'EN'] })[reg] || ['EN', 'ES', 'US'];
+    const first = ({ ES: ['ES', 'EN'], EU: ['EN', 'ES'], WW: ['ES', 'EN'], US: ['US', 'EN'], JP: ['JA', 'EN'], DE: ['DE', 'EN'], FR: ['FR', 'EN'], IT: ['IT', 'EN'], NL: ['NL', 'EN'], AU: ['AU', 'EN'], KR: ['KO', 'EN'] })[reg] || ['EN', 'ES'];
+    return [...new Set(first.concat(['ES', 'EN', 'US']))];
   }
   function tdbCands(r, kinds, langs) {
     const out = [];
@@ -832,7 +853,16 @@
   }
   async function resolveTdb(r) {
     const [front, back, full, media] = await Promise.all([firstOk(tdbCands(r, K_FRONT)), firstOk(tdbCands(r, K_BACK)), firstOk(tdbCands(r, K_FULL), true), firstOk(tdbCands(r, K_MEDIA))]);
-    return Object.assign({}, r, { front, back, full, media });
+    const out = Object.assign({}, r, { front, back, full, media });
+    // Si a esta edición le falta algo, lo buscamos en otras ediciones del mismo juego
+    for (const [id, reg] of (r.editions || []).slice(0, 4)) {
+      if (out.back && out.media) break;
+      const ed = Object.assign({}, r, { tdb: id, region: reg });
+      const [b, f, m] = await Promise.all([out.back ? null : firstOk(tdbCands(ed, K_BACK)), out.back || out.full ? null : firstOk(tdbCands(ed, K_FULL), true), out.media ? null : firstOk(tdbCands(ed, K_MEDIA))]);
+      out.back = out.back || b; out.full = out.full || f; out.media = out.media || m;
+      if (!out.front) out.front = await firstOk(tdbCands(ed, K_FRONT));
+    }
+    return out;
   }
   function hydrateThumbs(root) {
     root.querySelectorAll('img[data-cands]').forEach((img) => {
@@ -943,7 +973,7 @@
     const it = {
       uid: uid(), kind, plat, ref: r.ref, title: r.title, year: r.year || null,
       front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null,
-      genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, v4: true,
+      genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, imgv: 2,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
     state.items.push(it);
@@ -973,7 +1003,7 @@
       <div class="layer-head"><h2>Añadir a la estantería</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
       <div class="body">
         <div class="modes" role="group" aria-label="Dónde añadirlo"><button data-act="addWish" data-id="0" aria-pressed="${!a.wish}">Lo tengo</button><button data-act="addWish" data-id="1" aria-pressed="${!!a.wish}">${I.heart}Lo quiero</button></div>
-        <div class="pills" role="group" aria-label="Colección">${COLLS.map((c) => `<button data-act="addColl" data-id="${c.id}" aria-pressed="${c.id === coll.id}">${esc(c.name)}</button>`).join('')}</div>
+        <div class="pills" role="group" aria-label="Colección">${visibleColls().map((c) => `<button data-act="addColl" data-id="${c.id}" aria-pressed="${c.id === coll.id}">${esc(c.name)}</button>`).join('')}</div>
         ${isMovie ? `<div class="pills" role="group" aria-label="Formato">${['dvd', 'bluray'].map((f) => `<button data-act="addFmt" data-id="${f}" aria-pressed="${a.fmt === f}">${PLAT[f].short}</button>`).join('')}</div>` : ''}
         <label class="search">${I.search}<span class="sr">Título</span>
           <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${isMovie ? 'Título de la película…' : 'Título del juego…'}" value="${esc(a.q || '')}">
@@ -1212,7 +1242,7 @@
       if (prev >= 0) state.friends[prev] = entry; else state.friends.push(entry);
       saveFriends();
       state.mode = 'friends'; state.friendId = id;
-      const firstColl = COLLS.find((c) => items.some((i) => PLAT[i.plat].coll === c.id));
+      const firstColl = orderedColls().find((c) => items.some((i) => PLAT[i.plat].coll === c.id));
       if (firstColl) state.tab = firstColl.id;
       render();
       toast(`Estantería de ${name} guardada en Amigos`);
@@ -1222,11 +1252,20 @@
   }
 
   // ---------- Ajustes ----------
+  function orderListHTML() {
+    const o = orderedColls(); const h = hiddenColls();
+    return o.map((c, i) => `<div class="order-row ${h.includes(c.id) ? 'off' : ''}"><span class="o-name">${esc(c.name)}</span>
+      <button class="icon-btn sm" data-act="ordMove" data-id="${c.id}" data-d="-1" aria-label="Subir ${esc(c.name)}" ${i === 0 ? 'disabled' : ''}>${I.up}</button>
+      <button class="icon-btn sm" data-act="ordMove" data-id="${c.id}" data-d="1" aria-label="Bajar ${esc(c.name)}" ${i === o.length - 1 ? 'disabled' : ''}>${I.down}</button>
+      <label class="o-show"><input type="checkbox" data-act="ordShow" data-id="${c.id}" ${h.includes(c.id) ? '' : 'checked'}><span>Ver</span></label></div>`).join('');
+  }
   function settingsHTML() {
     return `<div class="layer sheet" role="dialog" aria-modal="true" aria-label="Ajustes">
       <div class="layer-head"><h2>Ajustes</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
       <div class="body scroll">
         ${installPrompt ? `<div class="card"><h3>Instalar en el móvil</h3><p>Ludoteca se abrirá como una app más, a pantalla completa y sin conexión.</p><button class="btn btn-amber" data-act="install">${I.download}Instalar Ludoteca</button></div>` : ''}
+        <div class="card"><h3>Tus estanterías</h3><p>Ponlas en el orden que prefieras y oculta las que no uses. Cada persona lo elige en su móvil.</p>
+          <div class="order-list" id="orderList">${orderListHTML()}</div></div>
         <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Guarda una copia por si cambias de teléfono o borras los datos del navegador.</p>
           <div class="row"><button class="btn btn-ghost" data-act="export">${I.download}Guardar</button><button class="btn btn-ghost" data-act="import">Recuperar</button></div>
           <input type="file" id="importFile" accept="application/json,.json" class="hidden"></div>
@@ -1382,9 +1421,24 @@
       case 'doShare': doShare(); break;
       case 'settings': state.layer = 'settings'; $layers.innerHTML = settingsHTML(); break;
       case 'export': exportBackup(); break;
+      case 'ordMove': {
+        const o = collOrder(); const i = o.indexOf(id); const j = i + Number(el.dataset.d);
+        if (i < 0 || j < 0 || j >= o.length) break;
+        [o[i], o[j]] = [o[j], o[i]]; LS.set('ludo.order', o);
+        document.getElementById('orderList').innerHTML = orderListHTML(); render();
+        const again = document.querySelector(`[data-act="ordMove"][data-id="${id}"][data-d="${el.dataset.d}"]`); if (again && !again.disabled) again.focus();
+        break;
+      }
+      case 'ordShow': {
+        let h = hiddenColls();
+        h = el.checked ? h.filter((x) => x !== id) : h.concat(id);
+        if (h.length >= COLLS.length) { el.checked = true; toast('Tiene que quedar al menos una estantería'); break; }
+        LS.set('ludo.hidden', h); document.getElementById('orderList').innerHTML = orderListHTML(); render();
+        break;
+      }
       case 'import': { const f = document.getElementById('importFile'); f.onchange = () => f.files[0] && importBackup(f.files[0]); f.click(); break; }
       case 'install': if (installPrompt) { installPrompt.prompt(); installPrompt = null; closeLayer(); } break;
-      case 'openFriend': state.friendId = id; state.friendWish = false; state.filter = Object.assign(state.filter, { q: '', genre: '', notMine: false }); { const f = currentFriend(); const c = f && COLLS.find((cc) => f.items.some((i) => PLAT[i.plat].coll === cc.id)); if (c) state.tab = c.id; } render(); $content.scrollTop = 0; break;
+      case 'openFriend': state.friendId = id; state.friendWish = false; state.filter = Object.assign(state.filter, { q: '', genre: '', notMine: false }); { const f = currentFriend(); const c = f && orderedColls().find((cc) => f.items.some((i) => PLAT[i.plat].coll === cc.id)); if (c) state.tab = c.id; } render(); $content.scrollTop = 0; break;
       case 'closeFriend': state.friendId = null; state.mode = 'friends'; render(); break;
       case 'removeFriend': {
         if (el.dataset.armed) { state.friends = state.friends.filter((f) => f.id !== id); saveFriends(); render(); }
