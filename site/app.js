@@ -13,13 +13,17 @@
     ps4:     { label: 'PS4',               short: 'PS4',      coll: 'ps',  caseColor: '#1a3f8f', bandText: '#ffffff', w: 108, h: 136, sw: 14, depth: 0.104, media: 'disc' },
     ps5:     { label: 'PS5',               short: 'PS5',      coll: 'ps',  caseColor: '#2257b8', bandText: '#ffffff', w: 108, h: 136, sw: 14, depth: 0.104, media: 'disc' },
     dvd:     { label: 'DVD',               short: 'DVD',      coll: 'mov', caseColor: '#141414', bandText: '#dddddd', w: 108, h: 152, sw: 14, depth: 0.104, media: 'disc' },
-    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 103, h: 118, sw: 12, depth: 0.093, media: 'disc' }
+    bluray:  { label: 'BLU-RAY',           short: 'Blu-ray',  coll: 'mov', caseColor: '#1560bd', bandText: '#ffffff', w: 103, h: 118, sw: 12, depth: 0.093, media: 'disc' },
+    // Cómics: tomo de 17×26 cm y grapa de 17×26 cm (a 0,8 px por mm, como el resto)
+    tomo:    { label: 'TOMO',              short: 'Tomo',     coll: 'com', caseColor: '#2a2522', bandText: '#f2ead9', w: 136, h: 208, sw: 13, depth: 0.09, media: 'book', book: true },
+    grapa:   { label: 'GRAPA',             short: 'Grapa',    coll: 'com', caseColor: '#efe8db', bandText: '#2a2522', w: 134, h: 206, sw: 4, depth: 0.03, media: 'book', book: true }
   };
   const COLLS = [
     { id: 'nin', name: 'DS · 3DS',    full: 'Nintendo DS y 3DS',          plats: ['ds', '3ds'],         noun: ['juego', 'juegos'] },
     { id: 'sw',  name: 'Switch',      full: 'Nintendo Switch y Switch 2', plats: ['switch', 'switch2'], noun: ['juego', 'juegos'] },
     { id: 'ps',  name: 'PlayStation', full: 'PlayStation 4 y 5',          plats: ['ps4', 'ps5'],        noun: ['juego', 'juegos'] },
-    { id: 'mov', name: 'Películas',   full: 'DVD y Blu-ray',              plats: ['dvd', 'bluray'],     noun: ['película', 'películas'] }
+    { id: 'mov', name: 'Películas',   full: 'DVD y Blu-ray',              plats: ['dvd', 'bluray'],     noun: ['película', 'películas'] },
+    { id: 'com', name: 'Cómics',      full: 'Cómics y novelas gráficas',  plats: ['tomo', 'grapa'],     noun: ['cómic', 'cómics'] }
   ];
   const collOf = (id) => COLLS.find((c) => c.id === id) || COLLS[1];
   // Orden de las estanterías elegido por cada persona (se guarda en su móvil)
@@ -32,7 +36,7 @@
   function hiddenColls() { try { return JSON.parse(localStorage.getItem('ludo.hidden') || '[]'); } catch (e) { return []; } }
   const orderedColls = () => collOrder().map(collOf);
   const visibleColls = () => { const h = hiddenColls(); const v = orderedColls().filter((c) => !h.includes(c.id)); return v.length ? v : orderedColls(); };
-  const ALLOWED_IMG = ['https://images.launchbox-app.com/', 'https://upload.wikimedia.org/', 'https://art.gametdb.com/', 'https://image.tmdb.org/'];
+  const ALLOWED_IMG = ['https://images.launchbox-app.com/', 'https://upload.wikimedia.org/', 'https://art.gametdb.com/', 'https://image.tmdb.org/', 'https://covers.openlibrary.org/'];
   // Clave gratuita de TMDB (uso personal, no comercial). Es la misma para todos.
   const TMDB_KEY = '7ae1e6e55398db1b1c344538507ad7e1';
   const REGION_NAME = { ES: 'España', EU: 'Europa', WW: 'Internacional', US: 'EE. UU.', JP: 'Japón', DE: 'Alemania', FR: 'Francia', IT: 'Italia', NL: 'Países Bajos', AU: 'Australia', KR: 'Corea' };
@@ -226,6 +230,7 @@
   }
   function coverInner(it) {
     if (it.kind === 'movie') return movieFront(it, '');
+    if (it.kind === 'comic' && !it.front) return comicCover(it, 10);
     if (!it.front && it.full) return fullPart(it, '100%');
     return it.front
       ? `<img src="${esc(it.front)}" alt="" loading="lazy" decoding="async">`
@@ -238,11 +243,11 @@
     const mark = badge ? `<i class="both" aria-hidden="true">${I.check}</i>` : '';
     const cls = it.wish ? ' wish' : '';
     if (it.face) {
-      return `<button class="item front${cls}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}">${mark}
+      return `<button class="item front${cls}${p.book ? ' book' : ''}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}">${mark}
         <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor}">
           <div class="cover">${coverInner(it)}</div></div></button>`;
     }
-    return `<button class="item spine${cls}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">${mark}
+    return `<button class="item spine${cls}${p.book ? ' book' : ''}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">${mark}
       <div class="body" style="width:${p.sw}px;height:${p.h}px;background:${p.caseColor}">${spineInner(it, p)}</div></button>`;
   }
   // Lomo: el escaneado oficial si existe (lomo suelto o la carátula completa abierta);
@@ -255,6 +260,7 @@
   };
   const SW_LOGO = (c) => `<svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><rect x=".6" y=".6" width="4" height="8.8" rx="2" fill="none" stroke="${c}" stroke-width="1.1"/><circle cx="2.6" cy="3" r=".9" fill="${c}"/><path d="M5.5 .6h1.9a2 2 0 0 1 2 2v4.8a2 2 0 0 1-2 2H5.5z" fill="${c}"/><circle cx="7.4" cy="6.4" r=".9" fill="#e60012"/></svg>`;
   function spineInner(it, p) {
+    if (it.kind === 'comic') return comicSpine(it, p);
     // La carátula completa de GameTDB es la edición española/europea: va primero
     if (it.full) return `<div class="sp-real" style="background-image:url('${cssUrl(it.full)}');background-size:${2 * p.w + p.sw}px ${p.h}px"></div>`;
     if (it.spine) return `<div class="sp-real" style="background-image:url('${cssUrl(it.spine)}')"></div>`;
@@ -267,7 +273,10 @@
   const SORTS = [['title', 'A–Z'], ['added', 'Recientes'], ['year', 'Año'], ['plat', 'Consola']];
   function sortList(list) {
     const s = state.filter.sort;
-    const t = (a, b) => byTitle(a, b);
+    const ck = (i) => norm(i.kind === 'comic' && i.series ? i.series : i.title);
+    const t = (a, b) => (a.kind === 'comic' || b.kind === 'comic')
+      ? ck(a).localeCompare(ck(b), 'es') || (parseFloat(a.num) || 0) - (parseFloat(b.num) || 0) || byTitle(a, b)
+      : byTitle(a, b);
     if (s === 'added') return list.sort((a, b) => (b.added || 0) - (a.added || 0) || t(a, b));
     if (s === 'year') return list.sort((a, b) => (b.year || 0) - (a.year || 0) || t(a, b));
     if (s === 'plat') return list.sort((a, b) => a.plat.localeCompare(b.plat) || t(a, b));
@@ -459,6 +468,30 @@
     return `<div class="bf ${cls}" style="width:${w}px;height:${h}px;left:${-w / 2}px;top:${-h / 2}px;transform:${t};${extra || ''}">${inner}</div>`;
   }
 
+  // ---------- Cómics: portada, lomo y contraportada cuando no hay imagen ----------
+  const comicLine = (it) => [it.series ? `${it.series}${it.num ? ` nº ${it.num}` : ''}` : (it.num ? `Nº ${it.num}` : ''), it.authors].filter(Boolean).join(' · ');
+  function comicCover(it, fs) {
+    return `<div class="ccover" style="--c:${colorFor(it.series || it.title)};font-size:${fs}px">
+      <div class="cc-top">${esc(it.publisher || '')}${it.num ? `<b>${esc(it.num)}</b>` : ''}</div>
+      <div class="cc-title">${esc(it.title)}</div>${it.series ? `<div class="cc-ser">${esc(it.series)}</div>` : ''}
+      <div class="cc-auth">${esc(it.authors || '')}</div></div>`;
+  }
+  function comicSpine(it, p) {
+    const col = colorFor(it.series || it.publisher || it.title);
+    if (it.plat === 'grapa') return `<div class="art" style="${it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${col}`}"></div>`;
+    return `<div class="cs" style="background:${col}">${it.num ? `<div class="cs-num">${esc(it.num)}</div>` : '<div class="cs-cap"></div>'}
+      <div class="cs-t"><span>${esc(it.title)}</span></div>${it.publisher ? `<div class="cs-pub">${esc(it.publisher.split(/[ /]/)[0].slice(0, 8))}</div>` : ''}</div>`;
+  }
+  function comicBack(it, fs) {
+    return `<div class="cback" style="--c:${colorFor(it.series || it.title)};font-size:${fs}px">
+      ${it.front ? `<div class="cb-art" style="background-image:url('${cssUrl(it.front)}')"></div>` : ''}
+      <div class="cb-body"><div class="cb-title">${esc(it.title)}</div>
+      ${it.series ? `<p>${esc(it.series)}${it.num ? ` · nº ${esc(it.num)}` : ''}</p>` : ''}
+      ${it.authors ? `<p class="cb-auth">${esc(it.authors)}</p>` : ''}
+      <div class="mb-grow"></div>
+      <div class="cb-foot">${esc([it.publisher, it.year].filter(Boolean).join(' · '))}${it.isbn ? `<br>ISBN ${esc(it.isbn)}` : ''}</div></div></div>`;
+  }
+
   function plainBack(p) {
     return `<div class="plain-back"><div class="pb-mold"></div><div class="pb-note">Contraportada no disponible en el catálogo</div></div>`;
   }
@@ -530,9 +563,9 @@
     const W = Math.round(p.w * s); const H = Math.round(p.h * s); const D = Math.max(8, Math.round(W * p.depth));
     const rim = Math.max(3, Math.round(W * 0.025));
     const caseVar = `--case:${p.caseColor};--rim:${rim}px`;
-    const frontInner = it.kind === 'movie' ? movieFront(it, `Portada de ${it.title}`) + '<i class="gloss"></i>' : (it.front ? `<img class="art" src="${esc(it.front)}" alt="Portada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '100%') : `<div class="art noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`) + '<i class="gloss"></i>';
-    const backInner = (it.back ? `<img class="art" src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '0%') : it.kind === 'movie' ? movieBack(it) : plainBack(p)) + '<i class="gloss"></i>';
-    const spineInner = `<div class="sp-art" style="${artBg(it)}"></div><span class="sp-t">${esc(it.title)}</span>`;
+    const frontInner = it.kind === 'movie' ? movieFront(it, `Portada de ${it.title}`) + '<i class="gloss"></i>' : (it.kind === 'comic' && !it.front) ? comicCover(it, Math.round(W * 0.075)) + '<i class="gloss"></i>' : (it.front ? `<img class="art" src="${esc(it.front)}" alt="Portada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '100%') : `<div class="art noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`) + '<i class="gloss"></i>';
+    const backInner = (it.back ? `<img class="art" src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '0%') : it.kind === 'movie' ? movieBack(it) : it.kind === 'comic' ? comicBack(it, Math.round(W * 0.05)) : plainBack(p)) + '<i class="gloss"></i>';
+    const spineInner = it.kind === 'comic' ? `<div class="body sp-book">${comicSpine(it, p)}</div>` : `<div class="sp-art" style="${artBg(it)}"></div><span class="sp-t">${esc(it.title)}</span>`;
     const box = [
       face('bf-front', W, H, `translateZ(${D / 2}px)`, frontInner),
       face('bf-back', W, H, `rotateY(180deg) translateZ(${D / 2}px)`, backInner, it.kind === 'movie' ? `font-size:${Math.max(7, Math.round(W * 0.034))}px` : ''),
@@ -544,7 +577,7 @@
 
     const parts = insideParts(it, p, W, H);
     const sc = Math.min(1, (vw - 28) / (2 * W));
-    const views = [['front', 'Portada'], ['back', 'Contraportada'], ['inside', 'Por dentro']];
+    const views = p.book ? [['front', 'Portada'], ['back', 'Contraportada']] : [['front', 'Portada'], ['back', 'Contraportada'], ['inside', 'Por dentro']];
 
     let actions;
     const zoomBtn = `<button class="btn btn-ghost sq" data-act="viewer" aria-label="Ver en grande">${I.zoom}</button>`;
@@ -568,12 +601,12 @@
     return `<div class="layer detail" role="dialog" aria-modal="true" aria-label="${esc(it.title)}">
       <div class="layer-head"><div style="display:flex;flex-direction:column;gap:6px;min-width:0">
         <span class="chip" style="background:${p.caseColor};color:${p.bandText}">${p.label}</span>
-        <h2>${esc(it.title)}${it.year ? ` <span style="font-weight:600;font-size:16px;color:var(--soft)">${esc(it.year)}</span>` : ''}</h2>${genreRow}</div>
+        <h2>${esc(it.title)}${it.year ? ` <span style="font-weight:600;font-size:16px;color:var(--soft)">${esc(it.year)}</span>` : ''}</h2>${it.kind === 'comic' && comicLine(it) ? `<p class="sub-h">${esc(comicLine(it))}</p>` : ''}${genreRow}</div>
         <button class="icon-btn" data-act="closeLayer" aria-label="Devolver a la estantería">${I.close}</button></div>
       <div class="stage" id="stage" style="${caseVar}">
         <div class="scene ${d.view === 'inside' ? 'hidden' : ''}" id="scene">
           <div class="floor" style="width:${Math.round(W * 1.1)}px;top:${Math.round(H / 2 + 8)}px;left:${-Math.round(W * 0.55)}px"></div>
-          <div class="box anim" id="box">${box}</div>
+          <div class="box anim ${p.book ? 'book' : ''}" id="box">${box}</div>
         </div>
         <div class="opened ${d.view === 'inside' ? '' : 'hidden'}" id="opened" style="width:${2 * W}px;height:${H}px;--W:${W}px;--sc:${sc}">
           <div class="tray plastic" style="left:${W}px;width:${W}px;height:${H}px">${parts.tray}</div>
@@ -584,7 +617,7 @@
         </div>
       </div>
       <p class="drag-hint" id="dragHint">${d.view === 'inside' ? 'Así es por dentro' : 'Arrastra la caja para girarla'}</p>
-      <div class="controls"><div class="seg" role="group" aria-label="Vista">${views.map(([id, n]) =>
+      <div class="controls"><div class="seg" role="group" aria-label="Vista" style="grid-template-columns:repeat(${views.length}, minmax(0, 1fr))">${views.map(([id, n]) =>
         `<button data-act="view" data-id="${id}" aria-pressed="${d.view === id}">${n}</button>`).join('')}</div>${actions}</div>${fichaHandle(it)}</div>`;
   }
 
@@ -838,6 +871,12 @@
     } else if (typeof it.ref === 'number' || /^\d+$/.test(ref)) {
       const list = (await loadImageList(it.plat))[ref] || [];
       list.forEach(([code, region, file]) => push(code === 'f' ? 'front' : code === 'b' ? 'back' : 'media', imgUrl(file), region || 'Sin región'));
+    } else if (it.kind === 'comic') {
+      try {
+        const q = it.series && !norm(it.title).includes(norm(it.series)) ? `${it.series} ${it.title}` : it.title;
+        const j = await fetch(`${OL}/search.json?` + new URLSearchParams({ q, limit: '24', fields: 'cover_i,language' })).then((r) => r.json());
+        (j.docs || []).filter((d) => d.cover_i).forEach((d) => push('front', olCover(d.cover_i, 'M'), (d.language || []).includes('spa') ? 'Español' : 'Otra edición', olCover(d.cover_i)));
+      } catch (e) { /* sin conexión */ }
     } else if (ref.startsWith('tmdb:')) {
       const [, type, id] = ref.split(':');
       try {
@@ -886,9 +925,10 @@
   const GAME_GENRES = ['Acción', 'Aventura', 'Rol', 'Plataformas', 'Puzle', 'Carreras', 'Deportes', 'Lucha', 'Disparos', 'Estrategia', 'Simulación', 'Party', 'Música', 'Terror', 'Sigilo', 'Educativo', 'Arcade'];
   const MOVIE_GENRES = ['Acción', 'Aventura', 'Animación', 'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 'Fantasía', 'Historia', 'Terror', 'Música', 'Misterio', 'Romance', 'Ciencia ficción', 'Suspense', 'Bélica', 'Western'];
   const TMDB_GENRES = { 28: 'Acción', 12: 'Aventura', 16: 'Animación', 35: 'Comedia', 80: 'Crimen', 99: 'Documental', 18: 'Drama', 10751: 'Familia', 14: 'Fantasía', 36: 'Historia', 27: 'Terror', 10402: 'Música', 9648: 'Misterio', 10749: 'Romance', 878: 'Ciencia ficción', 53: 'Suspense', 10752: 'Bélica', 37: 'Western', 10759: 'Acción', 10765: 'Ciencia ficción', 10768: 'Bélica', 10762: 'Familia' };
+  const COMIC_GENRES = ['Ciencia ficción', 'Superhéroes', 'Fantasía', 'Terror', 'Policiaco', 'Bélico', 'Western', 'Aventura', 'Humor', 'Histórico', 'Drama', 'Autobiográfico', 'Europeo', 'Manga'];
   let gSel = [];
   function genreSheetHTML(it) {
-    const base = it.kind === 'movie' ? MOVIE_GENRES : GAME_GENRES;
+    const base = it.kind === 'movie' ? MOVIE_GENRES : it.kind === 'comic' ? COMIC_GENRES : GAME_GENRES;
     const mine = state.items.filter((x) => x.kind === it.kind).flatMap(itemGenres);
     const all = [...new Set(base.concat(mine, gSel))];
     return `<div class="layer-head"><h2>Géneros y etiquetas</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
@@ -916,7 +956,7 @@
   }
   const PC_NAME = { ds: 'Nintendo DS', '3ds': 'Nintendo 3DS', switch: 'Nintendo Switch', switch2: 'Nintendo Switch 2', ps4: 'Playstation 4', ps5: 'Playstation 5' };
   function priceLinks(it) {
-    const fmt = it.kind === 'movie' ? (it.plat === 'bluray' ? 'blu-ray' : 'dvd') : (PC_NAME[it.plat] || PLAT[it.plat].label);
+    const fmt = it.kind === 'movie' ? (it.plat === 'bluray' ? 'blu-ray' : 'dvd') : it.kind === 'comic' ? [it.series && it.num ? '' : '', it.publisher ? it.publisher.split(' ')[0] : 'cómic'].join(' ').trim() : (PC_NAME[it.plat] || PLAT[it.plat].label);
     const q = encodeURIComponent(`${it.title} ${fmt}`);
     const links = [[`https://www.ebay.es/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`, 'eBay · vendidos']];
     if (PC_NAME[it.plat]) links.push([`https://www.pricecharting.com/search-products?type=prices&q=${encodeURIComponent(`${it.title} PAL ${PC_NAME[it.plat]}`)}`, 'PriceCharting']);
@@ -981,6 +1021,7 @@
         <div class="stat-grid">
           <div class="stat"><b>${own.filter((i) => i.kind === 'game').length}</b><span>juegos</span></div>
           <div class="stat"><b>${own.filter((i) => i.kind === 'movie').length}</b><span>películas</span></div>
+          <div class="stat"><b>${own.filter((i) => i.kind === 'comic').length}</b><span>cómics</span></div>
           <div class="stat"><b>${thisYear}</b><span>añadidos en ${year}</span></div>
           <div class="stat"><b>${wish.length}</b><span>en deseos</span></div>
         </div>
@@ -1110,7 +1151,7 @@
   // ---------- Ficha desplegable ----------
   const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
   function fichaSummary(it) {
-    const seenWord = it.kind === 'movie' ? 'Vista' : 'Jugado';
+    const seenWord = it.kind === 'movie' ? 'Vista' : it.kind === 'comic' ? 'Leído' : 'Jugado';
     const bits = [];
     if (it.seen) bits.push(seenWord);
     if (it.rating) bits.push(stars(it.rating));
@@ -1137,13 +1178,13 @@
       '<p class="fine">Datos de streaming: JustWatch, vía TMDB.</p>';
   }
   function fichaInner(it) {
-    const d = state.detail || {}; const ro = !!d.readOnly; const isM = it.kind === 'movie';
-    const seenWord = isM ? 'Vista' : 'Jugado';
+    const d = state.detail || {}; const ro = !!d.readOnly; const isM = it.kind === 'movie'; const isC = it.kind === 'comic';
+    const seenWord = isM ? 'Vista' : isC ? 'Leído' : 'Jugado';
     const diary = ro
       ? `<div class="diary"><div class="diary-top"><span class="dt">Su diario</span></div>
-          <p class="hint">${it.seen ? `${seenWord}${it.seenAt ? ` el ${esc(fmtDate(it.seenAt))}` : ''}` : (isM ? 'Aún sin ver' : 'Aún sin jugar')}${it.rating ? ` · <span class="stars-ro">${stars(it.rating)}</span>` : ''}</p></div>`
+          <p class="hint">${it.seen ? `${seenWord}${it.seenAt ? ` el ${esc(fmtDate(it.seenAt))}` : ''}` : (isM ? 'Aún sin ver' : isC ? 'Aún sin leer' : 'Aún sin jugar')}${it.rating ? ` · <span class="stars-ro">${stars(it.rating)}</span>` : ''}</p></div>`
       : `<div class="diary"><div class="diary-top"><span class="dt">Tu diario</span>
-          ${it.seen ? `<label class="seen-date">${isM ? 'Vista' : 'Jugado'} el <input type="date" id="seenDate" value="${esc(dateVal(it.seenAt || Date.now()))}"></label>` : ''}</div>
+          ${it.seen ? `<label class="seen-date">${seenWord} el <input type="date" id="seenDate" value="${esc(dateVal(it.seenAt || Date.now()))}"></label>` : ''}</div>
           <div class="diary-row"><button class="btn ${it.seen ? 'btn-amber' : 'btn-ghost'}" data-act="seenToggle">${it.seen ? I.check : ''}${seenWord}</button>
           <div class="rate" role="group" aria-label="Tu nota">${[1, 2, 3, 4, 5].map((n) =>
             `<button data-act="rate" data-n="${n}" aria-label="${n} de 5" aria-pressed="${(it.rating || 0) >= n}">★</button>`).join('')}</div></div></div>`;
@@ -1159,6 +1200,11 @@
           ${t.collection ? `<div class="saga" id="saga"><div class="saga-info"><b>${esc(t.collection.name)}</b><small>Buscando el resto de la saga…</small></div></div>` : ''}
           <h4>Dónde verla en España</h4>${provHTML(t)}`;
       }
+    } else if (isC) {
+      const row = (k, v) => v ? `<div class="crow"><small>${k}</small><span>${esc(v)}</span></div>` : '';
+      body = `<div class="cinfo">${row('Colección', it.series ? `${it.series}${it.num ? ` · nº ${it.num}` : ''}` : (it.num ? `Nº ${it.num}` : ''))}${row('Autores', it.authors)}
+        ${row('Editorial', it.publisher)}${row('Año', it.year ? String(it.year) : '')}${row('Formato', PLAT[it.plat].short)}${row('ISBN', it.isbn)}</div>
+        ${ro ? '' : '<button class="btn btn-ghost" data-act="comicEdit">Editar datos</button>'}`;
     } else {
       body = `<p class="hint">${esc(PLAT[it.plat].label)}${it.year ? ` · ${esc(it.year)}` : ''}</p>`;
     }
@@ -1434,6 +1480,10 @@
       genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, imgv: 3,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
+    if (kind === 'comic') {
+      ['authors', 'publisher', 'series', 'num', 'isbn'].forEach((k) => { if (r[k]) it[k] = String(r[k]).slice(0, 160); });
+      it.face = countFace('com') < 3;
+    }
     state.items.push(it);
     saveItems();
     cacheImgs([it.front, it.back, it.media, it.full]);
@@ -1455,7 +1505,7 @@
   let lastResults = [];
   function addHTML() {
     const a = state.add; const coll = collOf(a.coll);
-    const isMovie = coll.id === 'mov';
+    const isMovie = coll.id === 'mov'; const isComic = coll.id === 'com';
     const canScan = 'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
     return `<div class="layer sheet" role="dialog" aria-modal="true" aria-label="Añadir a la colección">
       <div class="layer-head"><h2>Añadir a la estantería</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
@@ -1463,11 +1513,12 @@
         <div class="modes" role="group" aria-label="Dónde añadirlo"><button data-act="addWish" data-id="0" aria-pressed="${!a.wish}">Lo tengo</button><button data-act="addWish" data-id="1" aria-pressed="${!!a.wish}">${I.heart}Lo quiero</button></div>
         <div class="pills" role="group" aria-label="Colección">${visibleColls().map((c) => `<button data-act="addColl" data-id="${c.id}" aria-pressed="${c.id === coll.id}">${esc(c.name)}</button>`).join('')}</div>
         ${isMovie ? `<div class="pills" role="group" aria-label="Formato">${['dvd', 'bluray'].map((f) => `<button data-act="addFmt" data-id="${f}" aria-pressed="${a.fmt === f}">${PLAT[f].short}</button>`).join('')}</div>` : ''}
+        ${isComic ? `<div class="pills" role="group" aria-label="Formato">${['tomo', 'grapa'].map((f) => `<button data-act="addCfmt" data-id="${f}" aria-pressed="${(a.cfmt || 'tomo') === f}">${PLAT[f].short}</button>`).join('')}</div>` : ''}
         <label class="search">${I.search}<span class="sr">Título</span>
-          <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${isMovie ? 'Título de la película…' : 'Título del juego…'}" value="${esc(a.q || '')}">
+          <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${isMovie ? 'Título de la película…' : isComic ? 'Título, autor o ISBN…' : 'Título del juego…'}" value="${esc(a.q || '')}">
           <button class="icon-btn clear-q ${a.q ? '' : 'hidden'}" id="clearQ" data-act="clearQ" aria-label="Borrar la búsqueda" style="width:40px;height:40px">${I.close}</button>
           ${canScan ? `<button class="icon-btn" data-act="scan" aria-label="Escanear código de barras" style="width:40px;height:40px">${I.scan}</button>` : ''}</label>
-        <div class="hint" id="hint">${isMovie ? 'Títulos y carteles en español. Tú eliges el formato: DVD o Blu-ray.' : `Busca entre todos los juegos de ${esc(coll.plats.map((p) => PLAT[p].short).join(' y '))}.`}</div>
+        <div class="hint" id="hint">${isMovie ? 'Títulos y carteles en español. Tú eliges el formato: DVD o Blu-ray.' : isComic ? `Busca en Open Library${canScan ? ' o escanea el ISBN de la contraportada' : ''}. Lo que no esté, lo añades a mano.` : `Busca entre todos los juegos de ${esc(coll.plats.map((p) => PLAT[p].short).join(' y '))}.`}</div>
         <div class="results scroll" id="results"></div>
       </div></div>`;
   }
@@ -1476,7 +1527,7 @@
     lastResults = list;
     return list.map((r, i) => {
       const p = isMovie ? plat : r.plat;
-      const owned = state.items.find((m) => m.plat === p && String(m.ref) === String(r.ref) && m.kind === (isMovie ? 'movie' : 'game'));
+      const owned = state.items.find((m) => m.plat === p && String(m.ref) === String(r.ref));
       const thumb = r.front ? `<img src="${esc(r.front)}" alt="" loading="lazy">`
         : r.tdb ? `<img alt="" data-cands="${esc(tdbCands(r, K_THUMB, tdbLangs(r.region).slice(0, 2)).join('|'))}">` : '<div class="noimg"></div>';
       if (r.wiki) {
@@ -1484,7 +1535,7 @@
         return `<div class="result">${thumb}<div class="info"><b>${esc(r.title)}</b><small>${esc(r.desc)}</small></div>
           <span class="wiki-picks">${coll.plats.map((pl) => `<button class="btn btn-ghost" data-act="pickWiki" data-i="${i}" data-plat="${pl}">${esc(PLAT[pl].short)}</button>`).join('')}</span></div>`;
       }
-      const meta = isMovie ? esc(r.desc) : `${esc(PLAT[r.plat].short)}${r.year ? ' · ' + esc(r.year) : ''}${r.region ? ' · ' + esc(REGION_NAME[r.region] || r.region) : ''}`;
+      const meta = isMovie || r.comic ? esc(r.desc) : `${esc(PLAT[r.plat].short)}${r.year ? ' · ' + esc(r.year) : ''}${r.region ? ' · ' + esc(REGION_NAME[r.region] || r.region) : ''}`;
       return `<button class="result ${owned ? 'owned' : ''}" data-act="pick" data-i="${i}">${thumb}
         <div class="info"><b>${esc(r.title)}</b><small>${meta}</small></div>
         <span class="state">${owned ? (owned.wish ? 'En tus deseos' : 'En tu estantería') : 'Añadir'}</span></button>`;
@@ -1503,6 +1554,17 @@
     const coll = collOf(a.coll); const isMovie = coll.id === 'mov';
     const $res = document.getElementById('results'); const $hint = document.getElementById('hint');
     const seq = ++searchSeq;
+    if (coll.id === 'com') {
+      if (norm(q).length < 2) { $res.innerHTML = manualBtn(); lastResults = []; return; }
+      $hint.textContent = 'Buscando en Open Library…';
+      try {
+        const list = await searchComics(q);
+        if (seq !== searchSeq || !state.add) return;
+        $res.innerHTML = resultsHTML(list, true, a.cfmt || 'tomo') + manualBtn();
+        $hint.textContent = list.length ? 'Toca el tuyo. Si no es tu edición exacta, añádelo a mano.' : 'No aparece en Open Library. Añádelo a mano.';
+      } catch (e) { if (seq === searchSeq) { $res.innerHTML = manualBtn(); $hint.textContent = 'No he podido conectar con Open Library. Puedes añadirlo a mano.'; } }
+      return;
+    }
     if (norm(q).length < 2) { $res.innerHTML = ''; lastResults = []; return; }
     $hint.textContent = 'Buscando…';
     try {
@@ -1527,6 +1589,7 @@
     q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); q.blur(); } });
     setTimeout(() => q.focus(), 60);
     const coll = collOf(state.add.coll);
+    if (coll.id === 'com') { const r = document.getElementById('results'); if (r) r.innerHTML = manualBtn(); return; }
     if (coll.id !== 'mov') coll.plats.forEach((p) => loadPlat(p).catch(() => {}));
   }
 
@@ -1536,7 +1599,119 @@
     const $q = document.getElementById('q');
     $q.addEventListener('input', () => { syncClear(); runSearchSoon(); });
     $q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); $q.blur(); } });
-    if (q) runSearch();
+    if (q || state.add.coll === 'com') runSearch();
+  }
+
+  // ---------- Cómics: Open Library (sin claves) y alta a mano ----------
+  const OL = 'https://openlibrary.org';
+  const olCover = (id, size) => `https://covers.openlibrary.org/b/id/${id}-${size || 'L'}.jpg`;
+  const isbnOf = (q) => { const x = String(q).replace(/[-\s]/g, '').toUpperCase(); return /^(97[89]\d{10}|\d{9}[\dX])$/.test(x) ? x : null; };
+  const yearOf = (s) => { const m = String(s || '').match(/\b(1[89]\d\d|20\d\d)\b/); return m ? Number(m[1]) : null; };
+  // Las colecciones de quiosco suelen registrar «DC Comics» como título y la obra como subtítulo
+  const GENERIC_T = /^(dc comics|marvel|marvel comics|colecci[oó]n|novelas? gr[aá]ficas?|vertigo|sagas? dc|universos? dc|h[eé]roes y villanos)/i;
+  function comicFrom(title, subtitle) {
+    title = String(title || '').trim(); subtitle = String(subtitle || '').trim();
+    if (subtitle && GENERIC_T.test(title)) return { title: subtitle, series: title };
+    if (subtitle && (title + subtitle).length < 70) return { title: `${title}: ${subtitle}` };
+    return { title };
+  }
+  async function isbnLookup(isbn) {
+    const j = await fetch(`${OL}/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`).then((r) => r.json());
+    const d = j[`ISBN:${isbn}`]; if (!d) return null;
+    const t = comicFrom(d.title, d.subtitle);
+    const front = d.cover ? (d.cover.large || d.cover.medium) : null;
+    return Object.assign({ comic: true, ref: 'isbn:' + isbn, isbn, year: yearOf(d.publish_date),
+      front: front ? front.replace(/^http:/, 'https:') : null,
+      authors: (d.authors || []).map((a) => a.name).slice(0, 4).join(', '),
+      publisher: ((d.publishers || [])[0] || {}).name || '' }, t);
+  }
+  async function searchComics(q) {
+    const isbn = isbnOf(q);
+    if (isbn) { const r = await isbnLookup(isbn); return r ? [Object.assign(r, { desc: [r.publisher, r.year, 'ISBN ' + isbn].filter(Boolean).join(' · ') })] : []; }
+    const f = 'key,title,subtitle,author_name,publisher,first_publish_year,cover_i,language';
+    const get = (extra) => fetch(`${OL}/search.json?` + new URLSearchParams(Object.assign({ q, limit: '14', fields: f }, extra))).then((r) => r.json()).then((j) => j.docs || []).catch(() => []);
+    const [es, all] = await Promise.all([get({ language: 'spa', lang: 'es' }), get({ lang: 'es' })]);
+    const seen = new Set(); const out = [];
+    es.concat(all).forEach((d) => {
+      if (seen.has(d.key)) return; seen.add(d.key);
+      const t = comicFrom(d.title, d.subtitle);
+      const pubs = d.publisher || [];
+      const spa = (d.language || []).includes('spa');
+      out.push(Object.assign({ comic: true, ref: 'olw:' + String(d.key).split('/').pop(), year: d.first_publish_year || null,
+        front: d.cover_i ? olCover(d.cover_i) : null,
+        authors: (d.author_name || []).slice(0, 3).join(', '),
+        publisher: spa ? (pubs.find((x) => /ecc|norma|planeta|salvat|panini|dolmen|astiberri|ponent|reservoir|ediciones|editorial|zinco|forum|toutain|glénat|glenat|nuevo|aleta/i.test(x)) || pubs[0] || '') : '',
+        desc: [(d.author_name || [])[0], d.first_publish_year, spa ? 'en español' : 'otra edición'].filter(Boolean).join(' · ') }, t));
+    });
+    return out.slice(0, 20);
+  }
+  const manualBtn = () => `<button class="btn btn-ghost wiki-more" data-act="manual">${I.plus}Añadirlo a mano</button>`;
+
+  // Alta (o edición) a mano: grapas, ediciones antiguas y lo que no esté en Open Library
+  let manual = null;
+  function manualHTML(src) {
+    const v = (k) => esc(src && src[k] != null ? String(src[k]) : '');
+    const fmt = manual.cfmt;
+    return `<div class="layer-head"><h2>${manual.edit ? 'Editar datos' : 'Añadir a mano'}</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll mform">
+        <div class="pills" role="group" aria-label="Formato">${['tomo', 'grapa'].map((f) => `<button data-act="mFmt" data-id="${f}" aria-pressed="${fmt === f}">${PLAT[f].short}</button>`).join('')}</div>
+        <div class="field"><label for="mTitle">Título</label><input id="mTitle" maxlength="160" value="${v('title')}" placeholder="Por ejemplo: Transmetropolitan"></div>
+        <div class="vgrid"><div class="field"><label for="mSeries">Colección o serie</label><input id="mSeries" maxlength="120" value="${v('series')}" placeholder="Opcional"></div>
+          <div class="field"><label for="mNum">Número</label><input id="mNum" maxlength="12" inputmode="decimal" value="${v('num')}" placeholder="Opcional"></div></div>
+        <div class="vgrid"><div class="field"><label for="mPub">Editorial</label><input id="mPub" maxlength="80" value="${v('publisher')}" placeholder="Norma, ECC…"></div>
+          <div class="field"><label for="mYear">Año</label><input id="mYear" maxlength="4" inputmode="numeric" value="${v('year')}"></div></div>
+        <div class="field"><label for="mAuth">Autores</label><input id="mAuth" maxlength="160" value="${v('authors')}" placeholder="Guion y dibujo"></div>
+        <h4 class="vh">Portada</h4>
+        <div id="mCovers" class="mcovers">${coversHTML()}</div>
+        <button class="btn btn-ghost" data-act="mCoverFind">${I.search}Buscar portadas con este título</button>
+        <button class="btn btn-amber" data-act="mSave" style="height:50px">${manual.edit ? 'Guardar' : 'Añadir a la estantería'}</button></div>`;
+  }
+  function coversHTML() {
+    const tile = (u, label) => `<button class="mc" data-act="mCoverPick" ${u ? `data-u="${esc(u)}"` : ''} aria-pressed="${(manual.cover || null) === (u || null)}" aria-label="${esc(label)}">${u ? `<img src="${esc(u.replace(/-L\.jpg$/, '-M.jpg'))}" alt="" loading="lazy">` : '<span>Sin portada<br><small>diseño propio</small></span>'}</button>`;
+    return tile(null, 'Sin portada') + (manual.cover && !manual.covers.includes(manual.cover) ? tile(manual.cover, 'Portada actual') : '') + manual.covers.map((u) => tile(u, 'Portada')).join('');
+  }
+  function openManual(edit) {
+    const a = state.add || {};
+    const q = (document.getElementById('q') || {}).value || '';
+    const isbn = isbnOf(q);
+    manual = { edit: edit ? edit.uid : null, cfmt: edit ? edit.plat : (a.cfmt || 'tomo'), cover: edit ? edit.front || null : null, covers: [], isbn: edit ? edit.isbn : isbn };
+    openSub(manualHTML(edit || { title: isbn ? '' : q }), 'sheet');
+    const t = document.getElementById('mTitle'); if (t && !edit) setTimeout(() => t.focus(), 60);
+  }
+  async function findManualCovers() {
+    const title = ((document.getElementById('mTitle') || {}).value || '').trim();
+    const series = ((document.getElementById('mSeries') || {}).value || '').trim();
+    const box = document.getElementById('mCovers'); if (!box) return;
+    if (title.length < 2) { toast('Escribe primero el título'); return; }
+    box.insertAdjacentHTML('beforeend', '<p class="hint" id="mcWait">Buscando portadas…</p>');
+    try {
+      const q = series && !norm(title).includes(norm(series)) ? `${series} ${title}` : title;
+      const run = (qq) => fetch(`${OL}/search.json?` + new URLSearchParams({ q: qq, limit: '24', fields: 'cover_i' })).then((r) => r.json()).then((j) => (j.docs || []).map((d) => d.cover_i).filter(Boolean));
+      let ids = await run(q); if (ids.length < 3 && q !== title) ids = ids.concat(await run(title));
+      manual.covers = [...new Set(ids)].slice(0, 18).map((id) => olCover(id));
+      box.innerHTML = coversHTML();
+      if (!manual.covers.length) box.insertAdjacentHTML('beforeend', '<p class="hint">No he encontrado portadas. Quedará con un diseño propio.</p>');
+    } catch (e) { const w = document.getElementById('mcWait'); if (w) w.textContent = 'Sin conexión con Open Library.'; }
+  }
+  function saveManual() {
+    const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
+    const title = val('mTitle'); if (!title) { toast('Falta el título'); return; }
+    const data = { title: title.slice(0, 160), series: val('mSeries'), num: val('mNum'), publisher: val('mPub'), year: Number(val('mYear')) || null, authors: val('mAuth') };
+    const snapS = snapshot();
+    if (manual.edit) {
+      const it = state.items.find((x) => x.uid === manual.edit); if (!it) return;
+      Object.assign(it, data, { plat: manual.cfmt, front: manual.cover || it.front || null });
+      if (!manual.cover) it.front = null;
+      saveItems(); state.detail.item = it; closeSub(); closeSub(); rerenderDetail(); render();
+      setTimeout(() => toastUndo('Datos guardados', snapS), 0); return;
+    }
+    const r = Object.assign({ ref: manual.isbn ? 'isbn:' + manual.isbn : 'm:' + uid(), isbn: manual.isbn || '', front: manual.cover }, data);
+    const wish = !!(state.add && state.add.wish);
+    if (addItem(r, 'comic', manual.cfmt, wish)) {
+      closeSub();
+      state.tab = 'com'; LS.set('ludo.tab', 'com'); state.mode = wish ? 'wish' : 'mine'; state.friendId = null; render();
+      toastUndo(`${title} añadido a tu estantería`, snapS);
+    } else toast('Ya lo tienes en la estantería');
   }
 
   // ---------- Escáner de códigos de barras ----------
@@ -1597,6 +1772,13 @@
     rerenderAdd();
   }
   async function lookupBarcode(code, back) {
+    const isbn = isbnOf(code);
+    if (isbn && (/^97[89]/.test(isbn) || back.coll === 'com')) {
+      const a = Object.assign({}, back, { coll: 'com', q: isbn });
+      openAddWith(a);
+      return;
+    }
+    if (back.coll === 'com') { openAddWith(Object.assign({}, back, { q: '' })); toast('Ese código no es un ISBN. Añádelo a mano.'); return; }
     let title = null;
     try {
       const r = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + encodeURIComponent(code));
@@ -1624,7 +1806,7 @@
     return new Uint8Array(await res.arrayBuffer());
   }
   const WIKI = 'https://upload.wikimedia.org/wikipedia/';
-  const SHORT = [['~', WIKI], ['^', 'https://art.gametdb.com/'], ['*', 'https://image.tmdb.org/t/p/'], ['!', 'https://images.launchbox-app.com/']];
+  const SHORT = [['~', WIKI], ['^', 'https://art.gametdb.com/'], ['*', 'https://image.tmdb.org/t/p/'], ['!', 'https://images.launchbox-app.com/'], ['@', 'https://covers.openlibrary.org/b/id/']];
   const shortU = (u) => { if (!u) return ''; const m = SHORT.find(([, p]) => u.startsWith(p)); return m ? m[0] + u.slice(m[1].length) : u; };
   const longU = (u) => { if (typeof u !== 'string' || !u) return null; const m = SHORT.find(([k]) => u[0] === k); return safeImg(m ? m[1] + u.slice(1) : u); };
   async function encodeShare() {
@@ -1634,6 +1816,7 @@
         const w = it.wish ? 1 : 0; const g = itemGenres(it); const dy = [it.seen ? 1 : 0, it.rating || 0];
         if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0, w, g, ...dy];
         if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g, ...dy, shortU(it.spine)];
+        if (it.kind === 'comic') return [3, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.ref), w, g, ...dy, it.series || '', it.num || '', it.publisher || '', it.authors || '', it.isbn || ''];
         return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.tmdbRef || it.ref), w, g, ...dy];
       })
     };
@@ -1660,7 +1843,11 @@
         if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g, { wish: !!x[4], genres: cleanG(x[5]) || g.genres || [], seen: !!x[6], rating: clampR(x[7]) }));
       } else if (x[0] === 1 && PLAT[x[1]].coll === 'mov') {
         items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [], seen: !!x[9], rating: clampR(x[10]) });
-      } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov') {
+      } else if (x[0] === 3 && PLAT[x[1]] && PLAT[x[1]].coll === 'com') {
+        const st = (v, n) => String(v || '').slice(0, n);
+        items.push({ uid: uid(), kind: 'comic', plat: x[1], ref: st(x[6], 200), title: st(x[2], 160), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [], seen: !!x[9], rating: clampR(x[10]),
+          series: st(x[11], 120), num: st(x[12], 12), publisher: st(x[13], 80), authors: st(x[14], 160), isbn: st(x[15], 13) });
+      } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov' && PLAT[x[1]].coll !== 'com') {
         items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [], seen: !!x[12], rating: clampR(x[13]), spine: longU(x[14]) });
       }
     }
@@ -1762,6 +1949,11 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     done(); toast('Copia descargada en tu móvil');
   }
+  function comicFields(i) {
+    if (i.kind !== 'comic') return {};
+    const st = (v, n) => (v ? String(v).slice(0, n) : undefined);
+    return { series: st(i.series, 120), num: st(i.num, 12), publisher: st(i.publisher, 80), authors: st(i.authors, 160), isbn: st(i.isbn, 13) };
+  }
   function importBackup(file) {
     const reader = new FileReader();
     reader.onload = () => {
@@ -1769,7 +1961,7 @@
         const j = JSON.parse(reader.result);
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
-          uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
+          uid: String(i.uid || uid()), kind: ['movie', 'comic'].includes(i.kind) ? i.kind : 'game', plat: i.plat, ref: i.ref, title: String(i.title), ...comicFields(i),
           year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), spine: safeImg(i.spine), spinev: Number(i.spinev) || 0, face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined,
           paid: isNum(i.paid) ? i.paid : undefined, value: isNum(i.value) ? i.value : undefined, valueAt: Number(i.valueAt) || undefined,
           paidAt: typeof i.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) ? i.paidAt : undefined
@@ -1779,7 +1971,7 @@
           state.friends = j.friends.filter((f) => f && f.id && Array.isArray(f.items)).map((f) => ({
             id: String(f.id), name: String(f.name || 'Amigo').slice(0, 40), received: Number(f.received) || Date.now(),
             items: f.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
-              uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
+              uid: String(i.uid || uid()), kind: ['movie', 'comic'].includes(i.kind) ? i.kind : 'game', plat: i.plat, ref: i.ref, title: String(i.title), ...comicFields(i),
               year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || [], seen: !!i.seen, rating: clampR(i.rating)
             }))
           }));
@@ -1911,11 +2103,18 @@
       case 'stats': state.layer = 'stats'; $layers.innerHTML = statsHTML(); break;
       case 'add': openAdd(state.tab); break;
       case 'addColl': state.add.coll = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
+      case 'addCfmt': state.add.cfmt = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
+      case 'manual': openManual(); break;
+      case 'mFmt': manual.cfmt = id; el.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); break;
+      case 'mCoverFind': findManualCovers(); break;
+      case 'mCoverPick': manual.cover = el.dataset.u || null; document.querySelectorAll('#mCovers .mc').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); break;
+      case 'mSave': saveManual(); break;
+      case 'comicEdit': openManual(state.detail.item); break;
       case 'addFmt': state.add.fmt = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'pick': {
         let r = lastResults[Number(el.dataset.i)]; if (!r) break;
-        const isMovie = state.add.coll === 'mov';
-        const plat = isMovie ? state.add.fmt : r.plat;
+        const isMovie = state.add.coll === 'mov'; const isComic = state.add.coll === 'com';
+        const plat = isMovie ? state.add.fmt : isComic ? (state.add.cfmt || 'tomo') : r.plat;
         if (state.items.find((m) => m.plat === plat && String(m.ref) === String(r.ref))) { toast('Ya lo tienes en la estantería'); break; }
         if (r.tdb && !r.front && !r.full) {
           el.querySelector('.state').textContent = 'Buscando…';
@@ -1923,7 +2122,7 @@
           if (!state.add) break;
         }
         const wish = !!state.add.wish; const snapA = snapshot();
-        if (addItem(r, isMovie ? 'movie' : 'game', plat, wish)) {
+        if (addItem(r, isMovie ? 'movie' : isComic ? 'comic' : 'game', plat, wish)) {
           el.classList.add('owned'); el.querySelector('.state').textContent = wish ? 'En tus deseos' : 'En tu estantería';
           state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = wish ? 'wish' : 'mine'; state.friendId = null; render();
           toastUndo(wish ? `${r.title} añadido a tus deseos` : `${r.title} añadido a tu estantería`, snapA);

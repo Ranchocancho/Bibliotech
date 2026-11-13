@@ -1,9 +1,9 @@
 /* Ludoteca – service worker: funciona sin conexión y guarda las portadas. */
-const VERSION = 'ludoteca-v6';
+const VERSION = 'ludoteca-v7';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 const COVERS = 'ludo-covers';
 const FONTS = 'ludo-fonts';
-const COVER_HOSTS = ['images.launchbox-app.com', 'upload.wikimedia.org', 'art.gametdb.com', 'image.tmdb.org'];
+const COVER_HOSTS = ['images.launchbox-app.com', 'upload.wikimedia.org', 'art.gametdb.com', 'image.tmdb.org', 'covers.openlibrary.org'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
