@@ -6,7 +6,7 @@ const FONTS = 'ludo-fonts';
 const COVER_HOSTS = ['images.launchbox-app.com', 'upload.wikimedia.org', 'art.gametdb.com', 'image.tmdb.org'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -51,7 +51,8 @@ self.addEventListener('fetch', (e) => {
   }
 
   // La app: red primero para estar al día, y si no hay conexión, lo guardado
-  e.respondWith(fetch(req).then((res) => {
+  // no-cache: pregunta siempre a GitHub si hay versión nueva (si no, el navegador la retiene 10 min)
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
     if (res.ok) caches.open(VERSION).then((c) => c.put(req, res.clone()));
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))));
