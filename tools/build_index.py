@@ -238,6 +238,26 @@ def main():
             known.add(gametdb.norm(r[1]))
             for a in r[6]:
                 known.add(gametdb.norm(a))
+        # Enlazamos cada juego de GameTDB con su ficha de LaunchBox (mismo título)
+        # para usar sus imágenes como respaldo si a GameTDB le falta alguna.
+        lb_by_name = {}
+        for r in per_plat[plat]:
+            names = [r[1]] + list(r[6] if len(r) > 6 and r[6] else [])
+            for n in names:
+                lb_by_name.setdefault(gametdb.norm(n), r)
+        linked = 0
+        for r in tdb_rows:
+            if len(r) < 10:
+                r.extend([None] * (10 - len(r)))
+            for n in [r[1]] + list(r[6] or []):
+                lb = lb_by_name.get(gametdb.norm(n))
+                if lb:
+                    r[3], r[4], r[5] = lb[3], lb[4], lb[5]
+                    if not r[8] and len(lb) > 8 and lb[8]:
+                        r[8] = lb[8]
+                    linked += 1
+                    break
+        print(f"  {plat}: {linked} juegos de GameTDB enlazados con LaunchBox", file=sys.stderr)
         extra = [r for r in per_plat[plat] if gametdb.norm(r[1]) not in known]
         per_plat[plat] = tdb_rows + extra
         sources[plat] = f"gametdb+launchbox ({len(tdb_rows)} + {len(extra)})"

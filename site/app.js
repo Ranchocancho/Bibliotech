@@ -119,6 +119,15 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { $toast.innerHTML = ''; }, 2600);
   }
+  // Aviso con "Deshacer": guarda cómo estaba la colección justo antes del cambio
+  let undoSnap = null;
+  const snapshot = () => JSON.parse(JSON.stringify(state.items));
+  function toastUndo(msg, snap) {
+    undoSnap = snap;
+    $toast.innerHTML = `<div class="toast undo" role="status"><span>${esc(msg)}</span><button class="undo-btn" data-act="undo">Deshacer</button></div>`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $toast.innerHTML = ''; undoSnap = null; }, 6000);
+  }
 
   // ---------- Vista principal ----------
   function currentFriend() { return state.friendId ? state.friends.find((f) => f.id === state.friendId) : null; }
@@ -183,7 +192,7 @@
     } else if (state.mode === 'wish') {
       $dock.innerHTML = `<span>Lo que te gustaría tener</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la lista de deseos">${I.plus}Deseo</button>`;
     } else {
-      $dock.innerHTML = `<span>${items.length ? 'Toca un lomo para sacarlo' : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
+      $dock.innerHTML = `<span>${items.length ? 'Desliza el dedo sobre la balda' : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
     }
   }
 
@@ -205,7 +214,18 @@
   function fullPart(it, pos) {
     return `<div class="full-part" style="background-image:url('${cssUrl(it.full)}');background-position:${pos} 0"></div>`;
   }
+  // Películas: el cartel (2:3) se ve entero; el hueco se rellena con el propio cartel
+  // desenfocado, y las de Blu-ray llevan arriba su franja azul como las cajas reales.
+  function posterFit(url, alt) {
+    return `<div class="pfit"><div class="pfit-bg" style="background-image:url('${cssUrl(url)}')"></div><img class="pfit-img" src="${esc(url)}" alt="${esc(alt || '')}" loading="lazy" decoding="async" draggable="false"></div>`;
+  }
+  function movieFront(it, alt) {
+    const band = it.plat === 'bluray' ? '<div class="br-band"><span>BLU-RAY DISC</span></div>' : '';
+    const art = it.front ? posterFit(it.front, alt) : `<div class="noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`;
+    return `<div class="mfront">${band}<div class="mart">${art}</div></div>`;
+  }
   function coverInner(it) {
+    if (it.kind === 'movie') return movieFront(it, '');
     if (!it.front && it.full) return fullPart(it, '100%');
     return it.front
       ? `<img src="${esc(it.front)}" alt="" loading="lazy" decoding="async">`
@@ -260,7 +280,10 @@
         <button data-act="genre" data-id="" aria-pressed="${!state.filter.genre && !state.filter.notMine}">Todos</button>
         ${readOnly ? `<button data-act="notMine" aria-pressed="${!!state.filter.notMine}">Los que no tengo</button>` : ''}
         ${genres.map((g) => `<button data-act="genre" data-id="${esc(g)}" aria-pressed="${state.filter.genre === g}">${esc(g)}</button>`).join('')}</div>` : ''}` : '';
-    $content.innerHTML = head + tools + '<div id="shelfRows"></div>';
+    const nag = !readOnly && !wish && backupDue()
+      ? `<div class="nag" role="status"><div><b>Guarda una copia de tu colección</b><span>${lastBackup() ? `La última es del ${esc(fmtDate(lastBackup()))}.` : 'Si cambias de móvil, la recuperas en un momento.'}</span></div>
+        <div class="row"><button class="btn btn-amber" data-act="export">${I.download}Guardar</button><button class="btn btn-ghost" data-act="nagLater">Ahora no</button></div></div>` : '';
+    $content.innerHTML = head + nag + tools + '<div id="shelfRows"></div>';
     const q = document.getElementById('shelfQ');
     if (q) q.addEventListener('input', () => { state.filter.q = q.value; renderRows(all, coll, readOnly, wish); });
     const sel = document.getElementById('sortSel');
@@ -268,7 +291,84 @@
     renderRows(all, coll, readOnly, wish);
   }
 
+  // ---------- Lupa al deslizar por la balda ----------
+  // Deslizar en horizontal sobre una balda agranda las cajas bajo el dedo y muestra
+  // su título; al soltar, la caja queda sacada y un toque la abre. En vertical, la
+  // página se desplaza como siempre.
+  let picked = null; let suppressClick = 0;
+  function clearPick() {
+    document.querySelectorAll('.item.picked').forEach((e) => e.classList.remove('picked'));
+    const tip = document.getElementById('scrubTip'); if (tip) tip.remove();
+    picked = null;
+  }
+  function showTip(el, x, live) {
+    const it = el && shownItems().find((i) => i.uid === el.dataset.uid); if (!it) return;
+    let tip = document.getElementById('scrubTip');
+    if (!tip) { tip = document.createElement('button'); tip.id = 'scrubTip'; tip.className = 'scrub-tip'; tip.dataset.act = 'openPicked'; $app.appendChild(tip); }
+    tip.dataset.uid = it.uid;
+    tip.classList.toggle('live', !!live);
+    tip.setAttribute('aria-label', `Abrir ${it.title}`);
+    tip.innerHTML = `${it.front ? `<img src="${esc(it.front)}" alt="">` : `<i style="background:${colorFor(it.title)}"></i>`}
+      <span><b>${esc(it.title)}</b><small>${esc(PLAT[it.plat].short)}${it.year ? ' · ' + esc(it.year) : ''}${live ? '' : ' · toca para abrir'}</small></span>`;
+    const appR = $app.getBoundingClientRect(); const r = el.getBoundingClientRect();
+    const w = Math.min(280, appR.width - 24);
+    let left = (x != null ? x : r.left + r.width / 2) - appR.left - w / 2;
+    left = Math.max(12, Math.min(appR.width - w - 12, left));
+    tip.style.width = `${w}px`; tip.style.left = `${left}px`;
+    tip.style.top = `${Math.max(8, r.top - appR.top - 86)}px`;
+  }
+  function setScrub(row, idx) {
+    row.querySelectorAll('.item').forEach((e, i) => {
+      const d = Math.abs(i - idx);
+      e.classList.toggle('s0', d === 0); e.classList.toggle('s1', d === 1); e.classList.toggle('s2', d === 2);
+    });
+  }
+  function bindScrub(row) {
+    let st = null;
+    const itemAt = (x) => {
+      const items = [...row.querySelectorAll('.item')]; let idx = -1; let best = Infinity;
+      items.forEach((el, i) => {
+        const r = el.getBoundingClientRect();
+        const d = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+        if (d < best) { best = d; idx = i; }
+      });
+      return { items, idx };
+    };
+    row.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      st = { x: e.clientX, y: e.clientY, id: e.pointerId, mode: null, idx: -1 };
+    });
+    row.addEventListener('pointermove', (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x; const dy = e.clientY - st.y;
+      if (!st.mode) {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+          st.mode = 'scrub'; clearPick();
+          try { row.setPointerCapture(e.pointerId); } catch (err) { /* sin captura */ }
+          row.classList.add('scrubbing');
+        } else if (Math.abs(dy) > 8) { st = null; return; } else return;
+      }
+      const { items, idx } = itemAt(e.clientX);
+      if (idx < 0) return;
+      if (idx !== st.idx) { st.idx = idx; setScrub(row, idx); if (navigator.vibrate) navigator.vibrate(6); }
+      showTip(items[idx], e.clientX, true);
+    });
+    const end = (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      if (st.mode === 'scrub') {
+        const el = row.querySelectorAll('.item')[st.idx];
+        row.classList.remove('scrubbing'); setScrub(row, -99);
+        if (el) { el.classList.add('picked'); picked = el.dataset.uid; showTip(el, null, false); }
+        suppressClick = performance.now();
+      }
+      st = null;
+    };
+    row.addEventListener('pointerup', end);
+    row.addEventListener('pointercancel', (e) => { if (st && st.mode === 'scrub') end(e); else st = null; });
+  }
+
   function renderRows(all, coll, readOnly, wish) {
+    clearPick();
     const $rows = document.getElementById('shelfRows'); if (!$rows) return;
     const list = sortList(filtered(all, readOnly));
     if (!all.length) {
@@ -287,6 +387,7 @@
       return `<div class="shelf"><div class="shelf-row">${r.items.map((it) =>
         itemHTML(it, it === last && !it.face && max - r.w > 40 ? 9 : 0, readOnly && !it.wish && !!ownMatch(it))).join('')}</div><div class="plank"></div><div class="plank-under"></div></div>`;
     }).join('');
+    $rows.querySelectorAll('.shelf-row').forEach(bindScrub);
   }
 
   function renderFriends() {
@@ -337,7 +438,31 @@
   }
   function discEl(it, p, size) {
     if (it.media) return `<img class="disc-img" src="${esc(it.media)}" alt="Disco de ${esc(it.title)}" style="width:${size}px;height:${size}px">`;
+    const still = it.kind === 'movie' && it.tmdb && it.tmdb.backdrops && it.tmdb.backdrops[0];
+    if (still) {
+      // Disco serigrafiado con un fotograma de la película
+      return `<div class="gdisc pdisc" style="width:${size}px;height:${size}px;background-image:url('${cssUrl(still)}')" role="img" aria-label="Disco">
+        <span class="gd-t">${esc(it.title)}</span><span class="gd-p">${esc(p.short)}</span><i class="gd-hole"></i></div>`;
+    }
     return genericDisc(it, p, size);
+  }
+  // Contraportada de película montada con datos reales de TMDB
+  const fmtRuntime = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? `${m % 60} min` : ''}`.trim() : `${m} min`);
+  function movieBack(it) {
+    const t = it.tmdb;
+    if (!t) return `<div class="plain-back"><div class="pb-mold"></div><div class="pb-note">${tmdbBusy[it.uid] ? 'Preparando la contraportada…' : 'Contraportada no disponible'}</div></div>`;
+    const band = it.plat === 'bluray' ? '<div class="br-band"><span>BLU-RAY DISC</span></div>' : '<div class="dvd-band"><span>DVD</span></div>';
+    const stills = (t.backdrops || []).slice(0, 3);
+    const cast = (t.cast || []).slice(0, 3).map((c) => c.name).join(', ');
+    return `<div class="mback">${band}<div class="mb-body">
+      <div class="mb-title">${esc(it.title)}</div>
+      ${t.overview ? `<p class="mb-syn">${esc(t.overview)}</p>` : ''}
+      ${stills.length ? `<div class="mb-stills">${stills.map((b) => `<div style="background-image:url('${cssUrl(b)}')"></div>`).join('')}</div>` : ''}
+      <p class="mb-cred">${t.director ? `${t.type === 'tv' ? 'Una serie de' : 'Una película de'} <b>${esc(t.director)}</b>` : ''}${t.director && cast ? ' · ' : ''}${cast ? `Con <b>${esc(cast)}</b>` : ''}</p>
+      <div class="mb-grow"></div>
+      <div class="mb-foot">${t.cert ? `<span class="mb-cert">${esc(t.cert)}</span>` : ''}
+        <span class="mb-info">${esc([t.runtime ? fmtRuntime(t.runtime) : '', itemGenres(it).slice(0, 2).join(', ')].filter(Boolean).join(' · '))}<br>${esc([t.country, it.year].filter(Boolean).join(' · '))}</span>
+        <span class="mb-src">Datos e imágenes de TMDB</span></div></div></div>`;
   }
   function cartEl(it, p, w, h) {
     if (it.media) return `<img class="cart-img" src="${esc(it.media)}" alt="Cartucho de ${esc(it.title)}" style="max-width:${w}px;max-height:${h}px">`;
@@ -374,12 +499,12 @@
     const W = Math.round(p.w * s); const H = Math.round(p.h * s); const D = Math.max(8, Math.round(W * p.depth));
     const rim = Math.max(3, Math.round(W * 0.025));
     const caseVar = `--case:${p.caseColor};--rim:${rim}px`;
-    const frontInner = (it.front ? `<img class="art" src="${esc(it.front)}" alt="Portada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '100%') : `<div class="art noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`) + '<i class="gloss"></i>';
-    const backInner = (it.back ? `<img class="art" src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '0%') : plainBack(p)) + '<i class="gloss"></i>';
+    const frontInner = it.kind === 'movie' ? movieFront(it, `Portada de ${it.title}`) + '<i class="gloss"></i>' : (it.front ? `<img class="art" src="${esc(it.front)}" alt="Portada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '100%') : `<div class="art noart" style="background:${colorFor(it.title)}"><span>${esc(it.title)}</span></div>`) + '<i class="gloss"></i>';
+    const backInner = (it.back ? `<img class="art" src="${esc(it.back)}" alt="Contraportada de ${esc(it.title)}" draggable="false">` : it.full ? fullPart(it, '0%') : it.kind === 'movie' ? movieBack(it) : plainBack(p)) + '<i class="gloss"></i>';
     const spineInner = `<div class="sp-art" style="${artBg(it)}"></div><span class="sp-t">${esc(it.title)}</span>`;
     const box = [
       face('bf-front', W, H, `translateZ(${D / 2}px)`, frontInner),
-      face('bf-back', W, H, `rotateY(180deg) translateZ(${D / 2}px)`, backInner),
+      face('bf-back', W, H, `rotateY(180deg) translateZ(${D / 2}px)`, backInner, it.kind === 'movie' ? `font-size:${Math.max(7, Math.round(W * 0.034))}px` : ''),
       face('bf-spine', D, H, `rotateY(-90deg) translateZ(${W / 2}px)`, spineInner),
       face('bf-edge', D, H, `rotateY(90deg) translateZ(${W / 2}px)`, ''),
       face('bf-cap', W, D, `rotateX(90deg) translateZ(${H / 2}px)`, ''),
@@ -429,7 +554,7 @@
       </div>
       <p class="drag-hint" id="dragHint">${d.view === 'inside' ? 'Así es por dentro' : 'Arrastra la caja para girarla'}</p>
       <div class="controls"><div class="seg" role="group" aria-label="Vista">${views.map(([id, n]) =>
-        `<button data-act="view" data-id="${id}" aria-pressed="${d.view === id}">${n}</button>`).join('')}</div>${actions}</div></div>`;
+        `<button data-act="view" data-id="${id}" aria-pressed="${d.view === id}">${n}</button>`).join('')}</div>${actions}</div>${fichaHandle(it)}</div>`;
   }
 
   // Aplica la rotación (con inclinación del móvil) y mueve el brillo
@@ -542,11 +667,21 @@
     const box = document.getElementById('box'); box.classList.remove('anim'); applyBox();
     requestAnimationFrame(() => requestAnimationFrame(() => goPreset('front')));
     if (!tiltOn && 'DeviceOrientationEvent' in window) { window.addEventListener('deviceorientation', onTilt); tiltOn = true; }
+    if (item.kind === 'movie' && !item.tmdb) loadMovieData(item);
+    bindFichaHandle();
   }
 
+  function bindFichaHandle() {
+    const h = $layers.querySelector('.ficha-handle'); if (!h) return; let y0 = null;
+    h.addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+    h.addEventListener('pointerup', (e) => { if (y0 != null && y0 - e.clientY > 30) openFicha(); y0 = null; });
+  }
   function rerenderDetail() {
     const v = state.detail.view;
+    const subs = [...$layers.querySelectorAll('.sub')];
     $layers.innerHTML = detailHTML();
+    subs.forEach((x) => $layers.appendChild(x));
+    bindFichaHandle();
     bindStage();
     const box = document.getElementById('box'); if (box) { box.classList.remove('anim'); applyBox(); }
     if (v === 'inside') document.getElementById('opened').classList.add('open');
@@ -707,13 +842,13 @@
   async function pickAlt(i) {
     const a = altList[i]; const d = state.detail; if (!a || !d) return;
     const it = state.items.find((x) => x.uid === d.item.uid); if (!it) return;
-    let url = a.big;
+    let url = a.big; const snapI = snapshot();
     if (url.includes('art.gametdb.com') && !(await probe(url))) url = url.replace(/\/(cover|back)HQ\//, '/$1M/');
     it[a.k] = url;
     if (a.k === 'back') it.full = it.full || null;
     saveItems(); cacheImgs([url]);
     d.item = it; closeSub(); rerenderDetail(); render();
-    toast('Imagen cambiada');
+    toastUndo('Imagen cambiada', snapI);
   }
 
   // ---------- Géneros y etiquetas ----------
@@ -771,7 +906,7 @@
     for (const it of state.items) {
       const ref = String(it.ref);
       try {
-        const needImg = ref.startsWith('t:') && (it.imgv || 0) < 2 && (!it.back || !it.media);
+        const needImg = ref.startsWith('t:') && (it.imgv || 0) < 3 && (!it.back || !it.media);
         if (it.kind === 'game' && (it.genres === undefined || needImg)) {
           const g = await findGame(it.plat, ref).catch(() => null);
           if (it.genres === undefined || (!it.genres.length && g && g.genres && g.genres.length)) { it.genres = (g && g.genres) || it.genres || []; changed = true; }
@@ -779,7 +914,7 @@
             const r = await resolveTdb(g);
             if (r.front) { // si GameTDB no responde, lo reintentamos otro día
               ['front', 'back', 'full', 'media'].forEach((k) => { if (!it[k] && r[k]) { it[k] = r[k]; changed = true; } });
-              it.imgv = 2; changed = true;
+              it.imgv = 3; changed = true;
               cacheImgs([it.back, it.full, it.media]);
             }
           }
@@ -795,6 +930,226 @@
       } catch (e) { /* lo intentamos la próxima vez */ }
     }
     if (changed) { saveItems(); if (!state.layer) render(); }
+  }
+
+  // ---------- Datos de cine de TMDB (en español) ----------
+  const tmdbBusy = {};
+  function tmdbRefOf(it) {
+    const r = String(it.tmdbRef || it.ref || '');
+    return r.startsWith('tmdb:') ? r : null;
+  }
+  async function tmdbGet(path, params) {
+    const r = await fetch(`https://api.themoviedb.org/3/${path}?` + new URLSearchParams(Object.assign({ api_key: TMDB_KEY, language: 'es-ES' }, params || {})));
+    if (!r.ok) throw new Error('tmdb ' + r.status);
+    return r.json();
+  }
+  function saveOwner(it) {
+    if (state.items.includes(it)) saveItems(); else saveFriends();
+  }
+  async function ensureTmdb(it) {
+    if (it.kind !== 'movie' || tmdbBusy[it.uid]) return false;
+    if (it.tmdb && Date.now() - (it.tmdb.at || 0) < 14 * DAY) return false;
+    tmdbBusy[it.uid] = true;
+    try {
+      let ref = tmdbRefOf(it);
+      if (!ref) {
+        // Película añadida desde Wikipedia: buscamos su ficha en TMDB por título y año
+        const res = await searchTmdb(it.title).catch(() => []);
+        const m = res.find((x) => it.year && x.year === it.year) || res[0];
+        if (!m) return false;
+        it.tmdbRef = m.ref; ref = m.ref;
+        if (!it.front && m.front) it.front = m.front;
+      }
+      const [, type, id] = ref.split(':');
+      const j = await tmdbGet(`${type}/${id}`, {
+        append_to_response: type === 'tv' ? 'credits,videos,images,content_ratings,watch/providers' : 'credits,videos,images,release_dates,watch/providers',
+        include_image_language: 'es,null,en', include_video_language: 'es,en'
+      });
+      const dirs = type === 'tv' ? (j.created_by || []).map((x) => ({ id: x.id, name: x.name }))
+        : ((j.credits && j.credits.crew) || []).filter((c) => c.job === 'Director').map((c) => ({ id: c.id, name: c.name }));
+      const vids = ((j.videos && j.videos.results) || []).filter((v) => v.site === 'YouTube' && /Trailer|Teaser/i.test(v.type));
+      const tr = vids.find((v) => v.iso_639_1 === 'es') || vids[0];
+      let cert = '';
+      if (type === 'movie') {
+        const es = ((j.release_dates && j.release_dates.results) || []).find((r) => r.iso_3166_1 === 'ES');
+        cert = ((es && es.release_dates) || []).map((d) => d.certification).find(Boolean) || '';
+      } else {
+        const es = ((j.content_ratings && j.content_ratings.results) || []).find((r) => r.iso_3166_1 === 'ES');
+        cert = (es && es.rating) || '';
+      }
+      const prov = (j['watch/providers'] && j['watch/providers'].results && j['watch/providers'].results.ES) || {};
+      const mapP = (a) => (a || []).slice(0, 6).map((x) => ({ name: x.provider_name, logo: x.logo_path ? 'https://image.tmdb.org/t/p/w92' + x.logo_path : null }));
+      const bds = (j.images && j.images.backdrops) || [];
+      const clean = bds.filter((b) => !b.iso_639_1);
+      it.tmdb = {
+        at: Date.now(), type, id: Number(id),
+        overview: j.overview || '', runtime: j.runtime || (j.episode_run_time || [])[0] || null,
+        director: dirs.map((d) => d.name).slice(0, 2).join(', '), directors: dirs.slice(0, 2),
+        cast: ((j.credits && j.credits.cast) || []).slice(0, 8).map((c) => ({ id: c.id, name: c.name })),
+        vote: j.vote_average ? Math.round(j.vote_average * 10) / 10 : null,
+        trailer: tr ? tr.key : null, cert,
+        backdrops: (clean.length ? clean : bds).slice(0, 3).map((b) => 'https://image.tmdb.org/t/p/w780' + b.file_path),
+        collection: j.belongs_to_collection ? { id: j.belongs_to_collection.id, name: j.belongs_to_collection.name } : null,
+        providers: { flat: mapP(prov.flatrate), rent: mapP(prov.rent), buy: mapP(prov.buy) }, link: prov.link || null,
+        country: ((j.production_countries || [])[0] || {}).name || '', seasons: j.number_of_seasons || null
+      };
+      if (!itemGenres(it).length) it.genres = [...new Set((j.genres || []).map((g) => TMDB_GENRES[g.id]).filter(Boolean))];
+      saveOwner(it);
+      cacheImgs(it.tmdb.backdrops);
+      return true;
+    } catch (e) { return false; } finally { delete tmdbBusy[it.uid]; }
+  }
+  // Al abrir una película, si faltan sus datos, se piden y se repinta la caja
+  async function loadMovieData(it) {
+    if (it.kind !== 'movie') return;
+    const had = !!it.tmdb;
+    if (!had && state.detail && state.detail.item === it) rerenderDetail();
+    const ok = await ensureTmdb(it);
+    if ((ok || !had) && state.detail && state.detail.item === it) {
+      rerenderDetail();
+      const f = $layers.querySelector('.sub.ficha'); if (f) f.querySelector('.fsheet').innerHTML = fichaInner(it);
+    }
+  }
+
+  // ---------- Ficha desplegable ----------
+  const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+  function fichaSummary(it) {
+    const seenWord = it.kind === 'movie' ? 'Vista' : 'Jugado';
+    const bits = [];
+    if (it.seen) bits.push(seenWord);
+    if (it.rating) bits.push(stars(it.rating));
+    if (it.tmdb && it.tmdb.runtime) bits.push(fmtRuntime(it.tmdb.runtime));
+    else if (it.year) bits.push(String(it.year));
+    return bits.join(' · ');
+  }
+  function fichaHandle(it) {
+    return `<button class="ficha-handle" data-act="ficha" aria-label="Abrir la ficha"><i class="grip"></i>
+      <span>Ficha ${I.up}<small>${esc(fichaSummary(it))}</small></span></button>`;
+  }
+  const dateVal = (ts) => { try { return new Date(ts).toISOString().slice(0, 10); } catch (e) { return ''; } };
+  function personChips(t) {
+    const ppl = [];
+    (t.directors || []).forEach((d) => ppl.push({ id: d.id, name: d.name, role: 'dir' }));
+    (t.cast || []).slice(0, 6).forEach((c) => { if (!ppl.some((x) => x.id === c.id)) ppl.push({ id: c.id, name: c.name, role: 'cast' }); });
+    return ppl.map((x) => `<button class="pchip ${x.role === 'dir' ? 'dir' : ''}" data-act="person" data-id="${x.id}" data-name="${esc(x.name)}" data-role="${x.role}">${esc(x.name)}${x.role === 'dir' ? ` · ${t.type === 'tv' ? 'creación' : 'dirección'}` : ''}</button>`).join('');
+  }
+  function provHTML(t) {
+    const g = [['flat', 'Suscripción'], ['rent', 'Alquiler'], ['buy', 'Compra']].filter(([k]) => t.providers && t.providers[k] && t.providers[k].length);
+    if (!g.length) return '<p class="hint">No consta en ninguna plataforma en España ahora mismo.</p>';
+    return g.map(([k, n]) => `<div class="prov-row"><small>${n}</small><div class="prov-list">${t.providers[k].map((p) =>
+      `<span class="prov">${p.logo ? `<img src="${esc(p.logo)}" alt="">` : ''}${esc(p.name)}</span>`).join('')}</div></div>`).join('') +
+      '<p class="fine">Datos de streaming: JustWatch, vía TMDB.</p>';
+  }
+  function fichaInner(it) {
+    const d = state.detail || {}; const ro = !!d.readOnly; const isM = it.kind === 'movie';
+    const seenWord = isM ? 'Vista' : 'Jugado';
+    const diary = ro
+      ? `<div class="diary"><div class="diary-top"><span class="dt">Su diario</span></div>
+          <p class="hint">${it.seen ? `${seenWord}${it.seenAt ? ` el ${esc(fmtDate(it.seenAt))}` : ''}` : (isM ? 'Aún sin ver' : 'Aún sin jugar')}${it.rating ? ` · <span class="stars-ro">${stars(it.rating)}</span>` : ''}</p></div>`
+      : `<div class="diary"><div class="diary-top"><span class="dt">Tu diario</span>
+          ${it.seen ? `<label class="seen-date">${isM ? 'Vista' : 'Jugado'} el <input type="date" id="seenDate" value="${esc(dateVal(it.seenAt || Date.now()))}"></label>` : ''}</div>
+          <div class="diary-row"><button class="btn ${it.seen ? 'btn-amber' : 'btn-ghost'}" data-act="seenToggle">${it.seen ? I.check : ''}${seenWord}</button>
+          <div class="rate" role="group" aria-label="Tu nota">${[1, 2, 3, 4, 5].map((n) =>
+            `<button data-act="rate" data-n="${n}" aria-label="${n} de 5" aria-pressed="${(it.rating || 0) >= n}">★</button>`).join('')}</div></div></div>`;
+    let body = '';
+    if (isM) {
+      const t = it.tmdb;
+      if (!t) body = `<p class="hint">${tmdbBusy[it.uid] ? 'Cargando los datos de TMDB…' : 'No he encontrado esta película en TMDB.'}</p>`;
+      else {
+        body = `${t.overview ? `<p class="syn" id="syn">${esc(t.overview)}</p>${t.overview.length > 220 ? '<button class="linkish" data-act="synMore">Leer más</button>' : ''}` : ''}
+          <div class="row">${t.vote ? `<span class="vote">TMDB ${esc(String(t.vote).replace('.', ','))}</span>` : ''}
+            ${t.trailer ? `<a class="btn btn-ghost" href="https://www.youtube.com/watch?v=${encodeURIComponent(t.trailer)}" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>Ver tráiler</a>` : ''}</div>
+          ${(t.directors || []).length || (t.cast || []).length ? `<h4>${t.type === 'tv' ? 'Creación y reparto' : 'Dirección y reparto'}</h4><div class="pchips">${personChips(t)}</div>` : ''}
+          ${t.collection ? `<div class="saga" id="saga"><div class="saga-info"><b>${esc(t.collection.name)}</b><small>Buscando el resto de la saga…</small></div></div>` : ''}
+          <h4>Dónde verla en España</h4>${provHTML(t)}`;
+      }
+    } else {
+      body = `<p class="hint">${esc(PLAT[it.plat].label)}${it.year ? ` · ${esc(it.year)}` : ''}</p>`;
+    }
+    const gl = itemGenres(it);
+    const genres = `<h4>Géneros</h4><div class="genre-row">${gl.map((g) => `<span class="gchip">${esc(g)}</span>`).join('')}${ro ? '' : `<button class="gchip edit" data-act="editGenres">${I.tag}${gl.length ? 'Editar' : 'Añadir género'}</button>`}</div>`;
+    return `<button class="fs-grip" data-act="closeSub" aria-label="Cerrar la ficha"><i class="grip"></i><span>Ficha ${I.down}</span></button>${diary}${body}${genres}`;
+  }
+  function openFicha() {
+    const it = state.detail && state.detail.item; if (!it) return;
+    const el = openSub(`<div class="fs-dim" data-act="closeSub"></div><div class="fsheet" role="dialog" aria-label="Ficha de ${esc(it.title)}">${fichaInner(it)}</div>`, 'ficha');
+    bindFicha(el, it);
+    if (it.kind === 'movie') { if (!it.tmdb) loadMovieData(it); else loadSaga(it); }
+  }
+  function refreshFicha() {
+    const it = state.detail && state.detail.item; const el = $layers.querySelector('.sub.ficha');
+    if (!it || !el) return;
+    el.querySelector('.fsheet').innerHTML = fichaInner(it); bindFicha(el, it);
+    if (it.kind === 'movie' && it.tmdb) loadSaga(it);
+    const h = $layers.querySelector('.ficha-handle small'); if (h) h.textContent = fichaSummary(it);
+  }
+  function bindFicha(el, it) {
+    const dt = el.querySelector('#seenDate');
+    if (dt) dt.addEventListener('change', () => { const v = new Date(dt.value); if (!isNaN(v)) { it.seenAt = v.getTime(); saveItems(); } });
+    // Deslizar la ficha hacia abajo la cierra
+    const grip = el.querySelector('.fs-grip'); let y0 = null;
+    grip.addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+    grip.addEventListener('pointerup', (e) => { if (y0 != null && e.clientY - y0 > 40) closeSub(); y0 = null; });
+  }
+  function tmdbOwned(type, id) {
+    return owned().find((m) => tmdbRefOf(m) === `tmdb:${type}:${id}`);
+  }
+  async function loadSaga(it) {
+    const t = it.tmdb; if (!t || !t.collection) return;
+    try {
+      if (!t.parts) {
+        const c = await tmdbGet(`collection/${t.collection.id}`);
+        t.parts = (c.parts || []).filter((p) => p.release_date).sort((a, b) => a.release_date.localeCompare(b.release_date))
+          .map((p) => ({ id: p.id, title: p.title, year: Number((p.release_date || '').slice(0, 4)) || null, poster: p.poster_path ? 'https://image.tmdb.org/t/p/w342' + p.poster_path : null }));
+        saveOwner(it);
+      }
+      const box = document.getElementById('saga'); if (!box) return;
+      const have = t.parts.filter((p) => tmdbOwned('movie', p.id) || owned().some((m) => m.kind === 'movie' && norm(m.title) === norm(p.title)));
+      const wished = t.parts.filter((p) => state.items.some((m) => m.wish && tmdbRefOf(m) === `tmdb:movie:${p.id}`));
+      const missing = t.parts.filter((p) => !have.includes(p) && !wished.includes(p));
+      box.innerHTML = `<div class="saga-posters">${t.parts.slice(0, 6).map((p) => {
+        const h = have.includes(p);
+        return p.poster ? `<img src="${esc(p.poster)}" alt="" class="${h ? '' : 'missing'}">` : `<i class="${h ? '' : 'missing'}"></i>`;
+      }).join('')}</div><div class="saga-info"><b>${esc(t.collection.name)}</b><small>Tienes ${have.length} de ${t.parts.length}${wished.length ? ` · ${wished.length} en deseos` : ''}</small></div>
+        ${missing.length && !(state.detail && state.detail.readOnly) ? `<button class="btn btn-amber" data-act="sagaWish">${I.heart}Apuntar ${missing.length}</button>` : ''}`;
+    } catch (e) { const box = document.getElementById('saga'); if (box) box.querySelector('small').textContent = 'No se ha podido cargar la saga.'; }
+  }
+  function addMissingSaga() {
+    const it = state.detail.item; const t = it.tmdb; if (!t || !t.parts) return;
+    const snap = snapshot(); let n = 0;
+    t.parts.forEach((p) => {
+      if (tmdbOwned('movie', p.id) || state.items.some((m) => tmdbRefOf(m) === `tmdb:movie:${p.id}`) || owned().some((m) => m.kind === 'movie' && norm(m.title) === norm(p.title))) return;
+      if (addItem({ ref: `tmdb:movie:${p.id}`, title: p.title, year: p.year, front: p.poster ? p.poster.replace('/w342/', '/w500/') : null, genres: [] }, 'movie', it.plat, true)) n += 1;
+    });
+    if (n) { render(); refreshFicha(); toastUndo(`${n} ${n === 1 ? 'película apuntada' : 'películas apuntadas'} en tus deseos`, snap); }
+  }
+
+  // Películas de una persona (director o actor) que tienes y que te faltan
+  async function openPerson(id, name, role) {
+    const el = openSub(`<div class="layer-head"><h2>${esc(name)}</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll person-body"><p class="hint">Buscando sus películas…</p></div>`, 'sheet');
+    try {
+      const j = await tmdbGet(`person/${id}/movie_credits`);
+      const raw = role === 'dir' ? (j.crew || []).filter((c) => c.job === 'Director') : (j.cast || []);
+      const seen = new Set();
+      const list = raw.filter((m) => m.release_date && !seen.has(m.id) && seen.add(m.id))
+        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0)).slice(0, 30)
+        .sort((a, b) => b.release_date.localeCompare(a.release_date));
+      if (!el.isConnected) return;
+      personList = list.map((m) => ({ ref: `tmdb:movie:${m.id}`, title: m.title, year: Number(m.release_date.slice(0, 4)) || null, front: m.poster_path ? 'https://image.tmdb.org/t/p/w500' + m.poster_path : null, genres: [...new Set((m.genre_ids || []).map((g) => TMDB_GENRES[g]).filter(Boolean))] }));
+      const haveN = personList.filter((m) => personHas(m)).length;
+      el.querySelector('.person-body').innerHTML = `<p class="hint">${role === 'dir' ? 'Como director/a' : 'Como intérprete'} · tienes ${haveN} de ${personList.length}</p>` +
+        personList.map((m, i) => personRow(m, i)).join('');
+    } catch (e) { const b = el.querySelector('.person-body'); if (b) b.innerHTML = '<p class="hint">No he podido cargar sus películas.</p>'; }
+  }
+  let personList = [];
+  const personHas = (m) => owned().find((x) => tmdbRefOf(x) === m.ref || (x.kind === 'movie' && norm(x.title) === norm(m.title)));
+  const personWish = (m) => state.items.find((x) => x.wish && tmdbRefOf(x) === m.ref);
+  function personRow(m, i) {
+    const h = personHas(m); const w = personWish(m);
+    return `<div class="result ${h ? 'owned' : ''}">${m.front ? `<img src="${esc(m.front.replace('/w500/', '/w185/'))}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
+      <div class="info"><b>${esc(m.title)}</b><small>${m.year || ''}</small></div>
+      ${h ? '<span class="state">La tienes</span>' : w ? '<span class="state">En deseos</span>' : `<button class="btn btn-ghost sq" data-act="personWish" data-i="${i}" aria-label="Apuntar ${esc(m.title)} en deseos">${I.heart}</button>`}</div>`;
   }
 
   // ---------- Catálogo de juegos ----------
@@ -813,7 +1168,8 @@
   }
   function gameFromRow(plat, g) {
     if (typeof g[0] === 'string' && g[0].startsWith('t:')) {
-      return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2), genres: g[8] || [], editions: g[9] || [] };
+      return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2), genres: g[8] || [], editions: g[9] || [],
+        lb: { front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]) } };
     }
     return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null, genres: g[8] || [] };
   }
@@ -861,6 +1217,12 @@
       const [b, f, m] = await Promise.all([out.back ? null : firstOk(tdbCands(ed, K_BACK)), out.back || out.full ? null : firstOk(tdbCands(ed, K_FULL), true), out.media ? null : firstOk(tdbCands(ed, K_MEDIA))]);
       out.back = out.back || b; out.full = out.full || f; out.media = out.media || m;
       if (!out.front) out.front = await firstOk(tdbCands(ed, K_FRONT));
+    }
+    // Último recurso: las imágenes de la misma ficha en LaunchBox
+    if (r.lb) {
+      if (!out.back && !out.full && r.lb.back) out.back = r.lb.back;
+      if (!out.media && r.lb.media) out.media = r.lb.media;
+      if (!out.front && r.lb.front) out.front = r.lb.front;
     }
     return out;
   }
@@ -973,7 +1335,7 @@
     const it = {
       uid: uid(), kind, plat, ref: r.ref, title: r.title, year: r.year || null,
       front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null,
-      genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, imgv: 2,
+      genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, imgv: 3,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
     state.items.push(it);
@@ -1007,6 +1369,7 @@
         ${isMovie ? `<div class="pills" role="group" aria-label="Formato">${['dvd', 'bluray'].map((f) => `<button data-act="addFmt" data-id="${f}" aria-pressed="${a.fmt === f}">${PLAT[f].short}</button>`).join('')}</div>` : ''}
         <label class="search">${I.search}<span class="sr">Título</span>
           <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${isMovie ? 'Título de la película…' : 'Título del juego…'}" value="${esc(a.q || '')}">
+          <button class="icon-btn clear-q ${a.q ? '' : 'hidden'}" id="clearQ" data-act="clearQ" aria-label="Borrar la búsqueda" style="width:40px;height:40px">${I.close}</button>
           ${canScan ? `<button class="icon-btn" data-act="scan" aria-label="Escanear código de barras" style="width:40px;height:40px">${I.scan}</button>` : ''}</label>
         <div class="hint" id="hint">${isMovie ? 'Títulos y carteles en español. Tú eliges el formato: DVD o Blu-ray.' : `Busca entre todos los juegos de ${esc(coll.plats.map((p) => PLAT[p].short).join(' y '))}.`}</div>
         <div class="results scroll" id="results"></div>
@@ -1032,6 +1395,10 @@
     }).join('');
   }
 
+  function syncClear() {
+    const q = document.getElementById('q'); const b = document.getElementById('clearQ');
+    if (q && b) b.classList.toggle('hidden', !q.value);
+  }
   let searchSeq = 0;
   async function runSearch() {
     const a = state.add; if (!a) return;
@@ -1060,7 +1427,7 @@
     state.layer = 'add';
     $layers.innerHTML = addHTML();
     const q = document.getElementById('q');
-    q.addEventListener('input', runSearchSoon);
+    q.addEventListener('input', () => { syncClear(); runSearchSoon(); });
     q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); q.blur(); } });
     setTimeout(() => q.focus(), 60);
     const coll = collOf(state.add.coll);
@@ -1071,7 +1438,7 @@
     const q = state.add.q;
     $layers.innerHTML = addHTML();
     const $q = document.getElementById('q');
-    $q.addEventListener('input', runSearchSoon);
+    $q.addEventListener('input', () => { syncClear(); runSearchSoon(); });
     $q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); $q.blur(); } });
     if (q) runSearch();
   }
@@ -1168,16 +1535,17 @@
     const payload = {
       v: 1, n: state.name || 'Un amigo',
       i: state.items.map((it) => {
-        const w = it.wish ? 1 : 0; const g = itemGenres(it);
-        if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0, w, g];
-        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g];
-        return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.ref), w, g];
+        const w = it.wish ? 1 : 0; const g = itemGenres(it); const dy = [it.seen ? 1 : 0, it.rating || 0];
+        if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0, w, g, ...dy];
+        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g, ...dy];
+        return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.tmdbRef || it.ref), w, g, ...dy];
       })
     };
     const raw = new TextEncoder().encode(JSON.stringify(payload));
     if ('CompressionStream' in window) return 'd' + b64url(await streamBytes(raw, window.CompressionStream));
     return 'j' + b64url(raw);
   }
+  const clampR = (n) => Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
   const cleanG = (g) => (Array.isArray(g) ? g.filter((x) => typeof x === 'string').map((x) => x.slice(0, 24)).slice(0, 8) : null);
   async function decodeShare(s) {
     let bytes = unb64url(s.slice(1));
@@ -1193,11 +1561,11 @@
       if (!Array.isArray(x) || !PLAT[x[1]]) continue;
       if (x[0] === 0) {
         let g = null; try { g = await findGame(x[1], x[2]); } catch (e) { g = null; }
-        if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g, { wish: !!x[4], genres: cleanG(x[5]) || g.genres || [] }));
+        if (g) items.push(Object.assign({ uid: uid(), kind: 'game', face: !!x[3] }, g, { wish: !!x[4], genres: cleanG(x[5]) || g.genres || [], seen: !!x[6], rating: clampR(x[7]) }));
       } else if (x[0] === 1 && PLAT[x[1]].coll === 'mov') {
-        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [] });
+        items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [], seen: !!x[9], rating: clampR(x[10]) });
       } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov') {
-        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [] });
+        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [], seen: !!x[12], rating: clampR(x[13]) });
       }
     }
     return { name, items };
@@ -1266,21 +1634,37 @@
         ${installPrompt ? `<div class="card"><h3>Instalar en el móvil</h3><p>Ludoteca se abrirá como una app más, a pantalla completa y sin conexión.</p><button class="btn btn-amber" data-act="install">${I.download}Instalar Ludoteca</button></div>` : ''}
         <div class="card"><h3>Tus estanterías</h3><p>Ponlas en el orden que prefieras y oculta las que no uses. Cada persona lo elige en su móvil.</p>
           <div class="order-list" id="orderList">${orderListHTML()}</div></div>
-        <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Guarda una copia por si cambias de teléfono o borras los datos del navegador.</p>
+        <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Al guardar se abre el menú de compartir: elige Google Drive, tu correo o un chat contigo mismo. Para recuperarla, elige ese archivo.</p>
+          <p>${lastBackup() ? `Última copia: ${esc(fmtDate(lastBackup()))}.` : 'Todavía no has guardado ninguna copia.'}</p>
           <div class="row"><button class="btn btn-ghost" data-act="export">${I.download}Guardar</button><button class="btn btn-ghost" data-act="import">Recuperar</button></div>
-          <input type="file" id="importFile" accept="application/json,.json" class="hidden"></div>
+          <input type="file" id="importFile" accept="application/json,text/plain,.json,.txt" class="hidden"></div>
         <div class="card"><h3>De dónde salen las imágenes</h3><p>Nintendo: <a href="https://www.gametdb.com" target="_blank" rel="noopener">GameTDB</a>. PlayStation y resto de juegos: <a href="https://gamesdb.launchbox-app.com" target="_blank" rel="noopener">LaunchBox Games Database</a>${CATALOG_DATE ? ` (catálogo del ${esc(CATALOG_DATE)})` : ''}. Juegos que faltan: Wikipedia.</p>
           <p>Películas y series: <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>. Este producto usa la API de TMDB pero no está respaldado ni certificado por TMDB.</p>
           <p>Ludoteca es un proyecto personal sin ánimo de lucro.</p></div>
       </div></div>`;
   }
-  function exportBackup() {
-    const blob = new Blob([JSON.stringify({ app: 'ludoteca', v: 1, name: state.name, items: state.items, friends: state.friends }, null, 1)], { type: 'application/json' });
+  // Copia de seguridad: se abre el menú de compartir del móvil (Google Drive, correo,
+  // WhatsApp…) sin cuentas. Si el navegador no puede, se descarga el archivo.
+  const DAY = 86400000;
+  const lastBackup = () => Number(LS.get('ludo.lastBackup', 0)) || 0;
+  function backupDue() {
+    const own = state.items.length;
+    return own >= 5 && Date.now() - lastBackup() > 30 * DAY && Date.now() - (Number(LS.get('ludo.backupNag', 0)) || 0) > 3 * DAY;
+  }
+  async function exportBackup() {
+    const data = JSON.stringify({ app: 'ludoteca', v: 1, saved: Date.now(), name: state.name, items: state.items, friends: state.friends });
+    const name = `ludoteca-copia-${new Date().toISOString().slice(0, 10)}.txt`;
+    const file = new File([data], name, { type: 'text/plain' });
+    const done = () => { LS.set('ludo.lastBackup', Date.now()); if (state.layer === 'settings') $layers.innerHTML = settingsHTML(); if (!state.layer) render(); };
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Copia de Ludoteca', text: 'Copia de seguridad de mi colección de Ludoteca' }); done(); toast('Copia guardada'); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `ludoteca-${new Date().toISOString().slice(0, 10)}.json`;
+    a.href = URL.createObjectURL(file); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    done(); toast('Copia descargada en tu móvil');
   }
   function importBackup(file) {
     const reader = new FileReader();
@@ -1290,7 +1674,7 @@
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
           uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, v4: !!i.v4, added: i.added || Date.now()
+          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined
         }));
         state.items = clean; saveItems();
         if (Array.isArray(j.friends)) {
@@ -1298,7 +1682,7 @@
             id: String(f.id), name: String(f.name || 'Amigo').slice(0, 40), received: Number(f.received) || Date.now(),
             items: f.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
               uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || []
+              year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || [], seen: !!i.seen, rating: clampR(i.rating)
             }))
           }));
           saveFriends();
@@ -1312,16 +1696,30 @@
   }
 
   // ---------- Eventos ----------
-  let removeArmed = false;
   $app.addEventListener('click', async (e) => {
-    const el = e.target.closest('[data-act]'); if (!el) return;
+    // El "click" que el navegador lanza al terminar de deslizar no es un toque de verdad
+    if (suppressClick && performance.now() - suppressClick < 300 && !e.target.closest('#scrubTip')) { suppressClick = 0; return; }
+    suppressClick = 0;
+    const el = e.target.closest('[data-act]');
+    if (picked && (!el || (el.dataset.act !== 'open' && el.dataset.act !== 'openPicked'))) clearPick();
+    if (!el) return;
     const act = el.dataset.act; const id = el.dataset.id;
     switch (act) {
       case 'tab': state.tab = id; LS.set('ludo.tab', id); state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
       case 'mode': state.mode = id; state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
       case 'open': {
+        const it = shownItems().find((x) => x.uid === el.dataset.uid); if (!it) break;
+        if (el.classList.contains('spine') && picked !== it.uid) {
+          clearPick(); el.classList.add('picked'); picked = it.uid; showTip(el, null, false);
+          if (navigator.vibrate) navigator.vibrate(6);
+          break;
+        }
+        clearPick(); openDetail(it, !!state.friendId);
+        break;
+      }
+      case 'openPicked': {
         const it = shownItems().find((x) => x.uid === el.dataset.uid);
-        if (it) { removeArmed = false; openDetail(it, !!state.friendId); }
+        clearPick(); if (it) openDetail(it, !!state.friendId);
         break;
       }
       case 'view': setView(id); break;
@@ -1332,26 +1730,62 @@
         break;
       }
       case 'remove': {
-        if (!removeArmed) { removeArmed = true; el.classList.add('armed'); el.innerHTML = 'Toca otra vez para quitar'; el.style.flex = '1'; break; }
-        const u = state.detail.item.uid;
+        const u = state.detail.item.uid; const was = state.detail.item; const snap = snapshot();
         state.items = state.items.filter((x) => x.uid !== u); saveItems();
-        closeLayer(); render(); toast('Quitado de tu estantería');
+        closeLayer(); render(); toastUndo(was.wish ? `${was.title} quitado de tus deseos` : `${was.title} quitado de tu estantería`, snap);
+        break;
+      }
+      case 'undo': {
+        if (!undoSnap) break;
+        state.items = undoSnap; undoSnap = null; saveItems(); $toast.innerHTML = '';
+        if (state.detail) {
+          const it = state.items.find((x) => x.uid === state.detail.item.uid);
+          if (it) { state.detail.item = it; rerenderDetail(); } else if (state.layer === 'detail') closeLayer();
+        }
+        if (state.add) runSearch();
+        render(); toast('Deshecho');
         break;
       }
       case 'copyToMine':
       case 'copyToWish': {
         const it = state.detail.item; const w = act === 'copyToWish';
-        if (addItem(it, it.kind, it.plat, w)) { toast(w ? 'Añadido a tus deseos' : 'Añadido a tu estantería'); rerenderDetail(); }
+        const snapC = snapshot();
+        if (addItem(it, it.kind, it.plat, w)) { toastUndo(w ? 'Añadido a tus deseos' : 'Añadido a tu estantería', snapC); rerenderDetail(); }
         else toast('Ya lo tienes apuntado');
         break;
       }
       case 'gotIt': {
         const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
+        const snapG = snapshot();
         it.wish = false; it.added = Date.now(); it.face = countFace(PLAT[it.plat].coll) < 4; saveItems();
-        closeLayer(); state.mode = 'mine'; render(); toast(`¡${it.title} ya está en tu estantería!`);
+        closeLayer(); state.mode = 'mine'; render(); toastUndo(`¡${it.title} ya está en tu estantería!`, snapG);
         break;
       }
       case 'viewer': openViewer(); break;
+      case 'ficha': if (!$layers.querySelector('.sub.ficha')) openFicha(); break;
+      case 'seenToggle': {
+        const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
+        it.seen = !it.seen; if (it.seen && !it.seenAt) it.seenAt = Date.now(); saveItems(); state.detail.item = it; refreshFicha();
+        break;
+      }
+      case 'rate': {
+        const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
+        const n = Number(el.dataset.n); it.rating = it.rating === n ? 0 : n;
+        if (it.rating && !it.seen) { it.seen = true; it.seenAt = it.seenAt || Date.now(); }
+        saveItems(); state.detail.item = it; refreshFicha();
+        break;
+      }
+      case 'synMore': { const p = document.getElementById('syn'); if (p) p.classList.add('open'); el.remove(); break; }
+      case 'sagaWish': addMissingSaga(); break;
+      case 'person': openPerson(Number(id), el.dataset.name, el.dataset.role); break;
+      case 'personWish': {
+        const m = personList[Number(el.dataset.i)]; if (!m || !state.detail) break;
+        const snap = snapshot();
+        if (addItem(m, 'movie', state.detail.item.kind === 'movie' ? state.detail.item.plat : 'bluray', true)) {
+          el.outerHTML = '<span class="state">En deseos</span>'; render(); toastUndo(`${m.title} apuntada en tus deseos`, snap);
+        }
+        break;
+      }
       case 'altImages': openAlt(); break;
       case 'altPick': pickAlt(Number(el.dataset.i)); break;
       case 'closeSub': closeSub(); break;
@@ -1364,7 +1798,7 @@
       }
       case 'gSave': {
         const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) break;
-        it.genres = gSel.slice(0, 8); saveItems(); state.detail.item = it; closeSub(); rerenderDetail(); render(); toast('Géneros guardados');
+        const snapS = snapshot(); it.genres = gSel.slice(0, 8); saveItems(); setTimeout(() => toastUndo('Géneros guardados', snapS), 0); state.detail.item = it; closeSub(); rerenderDetail(); render();
         break;
       }
       case 'addWish': state.add.wish = id === '1'; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
@@ -1385,11 +1819,11 @@
           r = await resolveTdb(r);
           if (!state.add) break;
         }
-        const wish = !!state.add.wish;
+        const wish = !!state.add.wish; const snapA = snapshot();
         if (addItem(r, isMovie ? 'movie' : 'game', plat, wish)) {
           el.classList.add('owned'); el.querySelector('.state').textContent = wish ? 'En tus deseos' : 'En tu estantería';
           state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = wish ? 'wish' : 'mine'; state.friendId = null; render();
-          toast(wish ? `${r.title} añadido a tus deseos` : `${r.title} ya está en tu estantería`);
+          toastUndo(wish ? `${r.title} añadido a tus deseos` : `${r.title} añadido a tu estantería`, snapA);
         } else toast('Ya lo tienes en la estantería');
         break;
       }
@@ -1407,12 +1841,19 @@
       }
       case 'pickWiki': {
         const r = lastResults[Number(el.dataset.i)]; const plat = el.dataset.plat; if (!r || !PLAT[plat]) break;
-        const wishW = !!state.add.wish;
+        const wishW = !!state.add.wish; const snapW = snapshot();
         if (addItem(r, 'game', plat, wishW)) {
           el.closest('.result').classList.add('owned');
           state.tab = PLAT[plat].coll; LS.set('ludo.tab', state.tab); state.mode = wishW ? 'wish' : 'mine'; state.friendId = null; render();
-          toast(`${r.title} ya está en tu estantería`);
+          toastUndo(`${r.title} añadido`, snapW);
         } else toast('Ya lo tienes en la estantería');
+        break;
+      }
+      case 'clearQ': {
+        const q = document.getElementById('q'); if (!q) break;
+        q.value = ''; if (state.add) state.add.q = ''; searchSeq += 1;
+        const $res = document.getElementById('results'); if ($res) $res.innerHTML = '';
+        syncClear(); q.focus();
         break;
       }
       case 'scan': openScanner(); break;
@@ -1421,6 +1862,7 @@
       case 'doShare': doShare(); break;
       case 'settings': state.layer = 'settings'; $layers.innerHTML = settingsHTML(); break;
       case 'export': exportBackup(); break;
+      case 'nagLater': LS.set('ludo.backupNag', Date.now()); render(); break;
       case 'ordMove': {
         const o = collOrder(); const i = o.indexOf(id); const j = i + Number(el.dataset.d);
         if (i < 0 || j < 0 || j >= o.length) break;
@@ -1451,6 +1893,7 @@
   document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if ($layers.querySelector('.sub')) closeSub(); else if (state.layer) closeLayer(); });
   window.addEventListener('resize', debounce(() => { render(); if (state.layer === 'detail') rerenderDetail(); }, 200));
   window.addEventListener('hashchange', receiveFromHash);
+  $content.addEventListener('scroll', () => { if (picked) clearPick(); }, { passive: true });
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
 
   // ---------- Arranque ----------
