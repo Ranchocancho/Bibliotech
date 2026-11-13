@@ -47,6 +47,7 @@ PLATFORMS = {
 FRONT_TYPES = ["Box - Front", "Box - Front - Reconstructed"]
 BACK_TYPES = ["Box - Back", "Box - Back - Reconstructed"]
 MEDIA_TYPES = ["Disc", "Cart - Front"]
+SPINE_TYPES = ["Box - Spine"]
 
 # Preferimos ediciones españolas y europeas (PAL)
 # Géneros en español (comunes a LaunchBox y GameTDB)
@@ -182,7 +183,7 @@ def main():
     print(f"Juegos encontrados: {len(games)}", file=sys.stderr)
 
     # Pasada 2: imágenes y nombres alternativos
-    wanted_types = set(FRONT_TYPES + BACK_TYPES + MEDIA_TYPES)
+    wanted_types = set(FRONT_TYPES + BACK_TYPES + MEDIA_TYPES + SPINE_TYPES)
     with opener() as src:
         for tag, f in iter_top(src, ["GameImage", "GameAlternateName"]):
             gid = f.get("databaseid", "")
@@ -209,9 +210,11 @@ def main():
         region = (front[1] or "").lower()
         back = pick(g["images"], BACK_TYPES, region)
         media = pick(g["images"], MEDIA_TYPES, region)
+        spine = pick(g["images"], SPINE_TYPES, region)
+        # [9] ediciones (solo GameTDB) · [10] lomo oficial
         row = [gid, g["name"], g["year"], front[0],
                back[0] if back else None, media[0] if media else None,
-               sorted(g["alts"])[:6], None, g["genres"]]
+               sorted(g["alts"])[:6], None, g["genres"], None, spine[0] if spine else None]
         per_plat[g["plat"]].append(row)
         # Todas las imágenes del juego, para "Elegir otra imagen"
         allimg = []
@@ -247,12 +250,13 @@ def main():
                 lb_by_name.setdefault(gametdb.norm(n), r)
         linked = 0
         for r in tdb_rows:
-            if len(r) < 10:
-                r.extend([None] * (10 - len(r)))
+            if len(r) < 11:
+                r.extend([None] * (11 - len(r)))
             for n in [r[1]] + list(r[6] or []):
                 lb = lb_by_name.get(gametdb.norm(n))
                 if lb:
                     r[3], r[4], r[5] = lb[3], lb[4], lb[5]
+                    r[10] = lb[10] if len(lb) > 10 else None
                     if not r[8] and len(lb) > 8 and lb[8]:
                         r[8] = lb[8]
                     linked += 1
