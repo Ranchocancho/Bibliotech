@@ -273,13 +273,16 @@
     const wish = readOnly ? state.friendWish : state.mode === 'wish';
     const noun = wish ? ['deseo', 'deseos'] : coll.noun;
     const head = `<div class="wall-head"><h2>${esc(wish ? (readOnly ? 'Sus deseos' : 'Mis deseos') : coll.full)}</h2><span>${plural(all.length, noun)}</span></div>`;
-    const tools = all.length ? `<div class="shelf-tools">
-        <label class="mini-search">${I.search}<span class="sr">Buscar en esta balda</span><input id="shelfQ" type="search" placeholder="Buscar en la balda" value="${esc(state.filter.q)}" autocomplete="off"></label>
-        <label class="sort"><span class="sr">Ordenar</span><select id="sortSel">${SORTS.map(([v, n]) => `<option value="${v}" ${state.filter.sort === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
-      ${genres.length || readOnly ? `<div class="chips" role="group" aria-label="Filtrar por género">
-        <button data-act="genre" data-id="" aria-pressed="${!state.filter.genre && !state.filter.notMine}">Todos</button>
-        ${readOnly ? `<button data-act="notMine" aria-pressed="${!!state.filter.notMine}">Los que no tengo</button>` : ''}
-        ${genres.map((g) => `<button data-act="genre" data-id="${esc(g)}" aria-pressed="${state.filter.genre === g}">${esc(g)}</button>`).join('')}</div>` : ''}` : '';
+    const sOpen = state.searchOpen || !!state.filter.q;
+    const gVal = state.filter.notMine ? '__nm' : state.filter.genre;
+    const gSel = genres.length || readOnly ? `<label class="sort gsel ${gVal ? 'on' : ''}"><span class="sr">Filtrar por género</span><select id="genreSel">
+        <option value="">Todos los géneros</option>${readOnly ? `<option value="__nm" ${gVal === '__nm' ? 'selected' : ''}>Los que no tengo</option>` : ''}
+        ${genres.map((g) => `<option value="${esc(g)}" ${gVal === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>` : '';
+    const tools = all.length ? `<div class="shelf-tools">${sOpen
+      ? `<label class="mini-search">${I.search}<span class="sr">Buscar en esta balda</span><input id="shelfQ" type="search" placeholder="Buscar en la balda" value="${esc(state.filter.q)}" autocomplete="off" enterkeyhint="search"></label>
+        <button class="tool-btn" data-act="closeSearch" aria-label="Cerrar la búsqueda">${I.close}</button>`
+      : `<button class="tool-btn" data-act="openSearch" aria-label="Buscar en esta balda">${I.search}</button>${gSel}
+        <label class="sort"><span class="sr">Ordenar</span><select id="sortSel">${SORTS.map(([v, n]) => `<option value="${v}" ${state.filter.sort === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`}</div>` : '';
     const nag = !readOnly && !wish && backupDue()
       ? `<div class="nag" role="status"><div><b>Guarda una copia de tu colección</b><span>${lastBackup() ? `La última es del ${esc(fmtDate(lastBackup()))}.` : 'Si cambias de móvil, la recuperas en un momento.'}</span></div>
         <div class="row"><button class="btn btn-amber" data-act="export">${I.download}Guardar</button><button class="btn btn-ghost" data-act="nagLater">Ahora no</button></div></div>` : '';
@@ -288,6 +291,11 @@
     if (q) q.addEventListener('input', () => { state.filter.q = q.value; renderRows(all, coll, readOnly, wish); });
     const sel = document.getElementById('sortSel');
     if (sel) sel.addEventListener('change', () => { state.filter.sort = sel.value; LS.set('ludo.sort', sel.value); renderRows(all, coll, readOnly, wish); });
+    const gs = document.getElementById('genreSel');
+    if (gs) gs.addEventListener('change', () => {
+      state.filter.notMine = gs.value === '__nm'; state.filter.genre = gs.value === '__nm' ? '' : gs.value;
+      gs.parentNode.classList.toggle('on', !!gs.value); renderRows(all, coll, readOnly, wish);
+    });
     renderRows(all, coll, readOnly, wish);
   }
 
@@ -388,6 +396,15 @@
         itemHTML(it, it === last && !it.face && max - r.w > 40 ? 9 : 0, readOnly && !it.wish && !!ownMatch(it))).join('')}</div><div class="plank"></div><div class="plank-under"></div></div>`;
     }).join('');
     $rows.querySelectorAll('.shelf-row').forEach(bindScrub);
+    fillShelves($rows, coll);
+  }
+  // Baldas vacías hasta el final de la pantalla: siempre parece una estantería
+  function fillShelves($rows, coll) {
+    const h = Math.max(...Object.values(PLAT).filter((p) => p.coll === coll.id).map((p) => p.h)) + 8;
+    const empty = `<div class="shelf empty-shelf" aria-hidden="true"><div class="shelf-row" style="min-height:${h}px"></div><div class="plank"></div><div class="plank-under"></div></div>`;
+    const bottom = () => $rows.getBoundingClientRect().bottom - $content.getBoundingClientRect().top + $content.scrollTop;
+    let n = 0; const want = $content.scrollHeight > $content.clientHeight ? 0 : $content.clientHeight - 90;
+    while (n < 8 && ($rows.querySelectorAll('.shelf').length < 3 || bottom() < want)) { $rows.insertAdjacentHTML('beforeend', empty); n += 1; }
   }
 
   function renderFriends() {
@@ -532,7 +549,7 @@
         <button class="btn btn-danger sq" data-act="remove" aria-label="Quitar de mi colección">${I.trash}</button></div>`;
     }
     const gl = itemGenres(it);
-    const genreRow = `<div class="genre-row">${gl.map((g) => `<span class="gchip">${esc(g)}</span>`).join('')}${d.readOnly ? '' : `<button class="gchip edit" data-act="editGenres">${I.tag}${gl.length ? 'Editar' : 'Añadir género'}</button>`}</div>`;
+    const genreRow = `<div class="genre-row">${gl.map((g) => `<span class="gchip">${esc(g)}</span>`).join('')}${d.readOnly ? '' : `<button class="gchip edit" data-act="editGenres">${I.tag}${gl.length ? 'Editar' : 'Añadir género'}</button>`}${d.readOnly || it.wish ? '' : valueChip(it)}</div>`;
 
     return `<div class="layer detail" role="dialog" aria-modal="true" aria-label="${esc(it.title)}">
       <div class="layer-head"><div style="display:flex;flex-direction:column;gap:6px;min-width:0">
@@ -872,6 +889,66 @@
   }
   function refreshGenres() { const el = $layers.querySelector('.sub.sheet:last-child'); if (el) el.innerHTML = genreSheetHTML(state.detail.item); }
 
+  // ---------- Valor (privado: no viaja en el enlace de amigos) ----------
+  const isNum = (n) => typeof n === 'number' && isFinite(n);
+  const eur = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  const STALE = 183 * 864e5;
+  function valueChip(it) {
+    const pd = isNum(it.paid); const vl = isNum(it.value);
+    if (!pd && !vl) return `<button class="gchip edit val" data-act="value">€ Valor</button>`;
+    const diff = pd && vl ? it.value - it.paid : null;
+    const old = vl && it.valueAt && Date.now() - it.valueAt > STALE;
+    return `<button class="gchip val ${old ? 'stale' : ''}" data-act="value" aria-label="Valor y precio de compra">${vl ? eur(it.value) : 'Pagado ' + eur(it.paid)}${diff != null && diff !== 0 ? ` <em class="${diff > 0 ? 'up' : 'down'}">${diff > 0 ? '+' : '−'}${eur(Math.abs(diff))}</em>` : ''}${old ? ' ·' : ''}</button>`;
+  }
+  const PC_NAME = { ds: 'Nintendo DS', '3ds': 'Nintendo 3DS', switch: 'Nintendo Switch', switch2: 'Nintendo Switch 2', ps4: 'Playstation 4', ps5: 'Playstation 5' };
+  function priceLinks(it) {
+    const fmt = it.kind === 'movie' ? (it.plat === 'bluray' ? 'blu-ray' : 'dvd') : (PC_NAME[it.plat] || PLAT[it.plat].label);
+    const q = encodeURIComponent(`${it.title} ${fmt}`);
+    const links = [[`https://www.ebay.es/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`, 'eBay · vendidos']];
+    if (PC_NAME[it.plat]) links.push([`https://www.pricecharting.com/search-products?type=prices&q=${encodeURIComponent(`${it.title} PAL ${PC_NAME[it.plat]}`)}`, 'PriceCharting']);
+    links.push([`https://www.todocoleccion.net/buscador?bu=${q}`, 'todocoleccion']);
+    return links.map(([u, n]) => `<a class="btn btn-ghost" href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join('');
+  }
+  function valueSheetHTML(it) {
+    const n = (v) => isNum(v) ? String(v).replace('.', ',') : '';
+    const has = isNum(it.paid) || isNum(it.value);
+    return `<div class="layer-head"><h2>Valor</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body scroll"><p class="hint">Solo lo ves tú: no se comparte con tus amigos.</p>
+      <div class="vgrid"><div class="field"><label for="vPaid">Me costó (€)</label><input id="vPaid" inputmode="decimal" autocomplete="off" value="${n(it.paid)}" placeholder="0"></div>
+      <div class="field"><label for="vDate">Lo compré el</label><input id="vDate" type="date" value="${esc(it.paidAt || '')}"></div></div>
+      <div class="field"><label for="vNow">Se vende ahora por (€)</label><input id="vNow" inputmode="decimal" autocomplete="off" value="${n(it.value)}" placeholder="0"></div>
+      ${it.valueAt ? `<p class="hint">Precio actual apuntado el ${esc(new Date(it.valueAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }))}${Date.now() - it.valueAt > STALE ? '. Quizá toque revisarlo.' : '.'}</p>` : ''}
+      <h4 class="vh">Mira lo que se está pagando</h4><div class="vlinks">${priceLinks(it)}</div>
+      <button class="btn btn-amber" data-act="vSave" style="height:50px">Guardar</button>
+      ${has ? `<button class="btn btn-ghost" data-act="vClear">Borrar precios</button>` : ''}</div>`;
+  }
+  function openValue() { openSub(valueSheetHTML(state.detail.item), 'sheet'); }
+  function saveValue(clear) {
+    const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) return;
+    const num = (id) => { const v = (document.getElementById(id) || {}).value || ''; const f = parseFloat(v.replace(/[€\s]/g, '').replace(',', '.')); return isFinite(f) && f >= 0 ? Math.round(f * 100) / 100 : undefined; };
+    const snapS = snapshot();
+    if (clear) { delete it.paid; delete it.paidAt; delete it.value; delete it.valueAt; } else {
+      const paid = num('vPaid'); const value = num('vNow'); const d = (document.getElementById('vDate') || {}).value || '';
+      if (value !== it.value) it.valueAt = value === undefined ? undefined : Date.now();
+      it.paid = paid; it.value = value; it.paidAt = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined;
+    }
+    saveItems(); state.detail.item = it; closeSub(); rerenderDetail(); render();
+    setTimeout(() => toastUndo(clear ? 'Precios borrados' : 'Valor guardado', snapS), 0);
+  }
+  function valueCard(own) {
+    const pr = own.filter((i) => isNum(i.paid) || isNum(i.value)); if (!pr.length) return '';
+    const sum = (k) => pr.reduce((a, i) => a + (isNum(i[k]) ? i[k] : 0), 0);
+    const both = pr.filter((i) => isNum(i.paid) && isNum(i.value));
+    const profit = both.reduce((a, i) => a + i.value - i.paid, 0);
+    const top = both.filter((i) => i.value > i.paid).sort((a, b) => (b.value - b.paid) - (a.value - a.paid)).slice(0, 3);
+    const stale = pr.filter((i) => isNum(i.value) && i.valueAt && Date.now() - i.valueAt > STALE).length;
+    return `<div class="card"><h3>Valor de la colección</h3>
+      <div class="stat-grid v3"><div class="stat"><b>${eur(sum('paid'))}</b><span>invertido</span></div><div class="stat"><b>${eur(sum('value'))}</b><span>vale hoy</span></div>
+      <div class="stat"><b class="${profit >= 0 ? 'up' : 'down'}">${profit >= 0 ? '+' : '−'}${eur(Math.abs(profit))}</b><span>si lo vendes</span></div></div>
+      <p class="hint">${pr.length} de ${own.length} con precio${both.length < pr.length ? ` · el beneficio cuenta solo los ${both.length} con los dos precios` : ''}.${stale ? ` ${stale} con precio de hace más de 6 meses.` : ''}</p>
+      ${top.length ? `<p>${top.map((i) => `${esc(i.title)}: <em class="up">+${eur(i.value - i.paid)}</em>`).join('<br>')}</p>` : ''}</div>`;
+  }
+
   // ---------- Estadísticas ----------
   function statsHTML() {
     const own = owned(); const wish = state.items.filter((i) => i.wish);
@@ -893,6 +970,7 @@
           <div class="stat"><b>${thisYear}</b><span>añadidos en ${year}</span></div>
           <div class="stat"><b>${wish.length}</b><span>en deseos</span></div>
         </div>
+        ${valueCard(own)}
         ${byPlat.length ? `<div class="card"><h3>Por formato</h3>${byPlat.map(([k, n]) => bar(PLAT[k].short, n, maxP)).join('')}</div>` : ''}
         ${topG.length ? `<div class="card"><h3>Géneros favoritos</h3>${topG.map(([g, n]) => bar(g, n, topG[0][1])).join('')}</div>` : ''}
         ${oldest ? `<div class="card"><h3>La más veterana</h3><p>${esc(oldest.title)} (${esc(oldest.year)}, ${esc(PLAT[oldest.plat].short)})</p></div>` : ''}
@@ -1674,7 +1752,9 @@
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
           uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined
+          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined,
+          paid: isNum(i.paid) ? i.paid : undefined, value: isNum(i.value) ? i.value : undefined, valueAt: Number(i.valueAt) || undefined,
+          paidAt: typeof i.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) ? i.paidAt : undefined
         }));
         state.items = clean; saveItems();
         if (Array.isArray(j.friends)) {
@@ -1705,8 +1785,8 @@
     if (!el) return;
     const act = el.dataset.act; const id = el.dataset.id;
     switch (act) {
-      case 'tab': state.tab = id; LS.set('ludo.tab', id); state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
-      case 'mode': state.mode = id; state.filter.q = ''; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
+      case 'tab': state.tab = id; LS.set('ludo.tab', id); state.filter.q = ''; state.searchOpen = false; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
+      case 'mode': state.mode = id; state.filter.q = ''; state.searchOpen = false; state.filter.genre = ''; render(); $content.scrollTop = 0; break;
       case 'open': {
         const it = shownItems().find((x) => x.uid === el.dataset.uid); if (!it) break;
         if (el.classList.contains('spine') && picked !== it.uid) {
@@ -1804,6 +1884,11 @@
       case 'addWish': state.add.wish = id === '1'; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'friendWish': state.friendWish = id === '1'; state.filter.genre = ''; state.filter.notMine = false; render(); break;
       case 'genre': state.filter.genre = id; state.filter.notMine = false; render(); break;
+      case 'openSearch': { state.searchOpen = true; render(); const q = document.getElementById('shelfQ'); if (q) q.focus(); break; }
+      case 'closeSearch': state.searchOpen = false; state.filter.q = ''; render(); break;
+      case 'value': openValue(); break;
+      case 'vSave': saveValue(); break;
+      case 'vClear': saveValue(true); break;
       case 'notMine': state.filter.notMine = !state.filter.notMine; render(); break;
       case 'stats': state.layer = 'stats'; $layers.innerHTML = statsHTML(); break;
       case 'add': openAdd(state.tab); break;
@@ -1891,7 +1976,14 @@
     }
   });
   document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if ($layers.querySelector('.sub')) closeSub(); else if (state.layer) closeLayer(); });
-  window.addEventListener('resize', debounce(() => { render(); if (state.layer === 'detail') rerenderDetail(); }, 200));
+  let lastW = window.innerWidth;
+  window.addEventListener('resize', debounce(() => {
+    // El teclado del móvil solo cambia el alto: no repintamos, o se cerraría al escribir
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    const a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;
+    render(); if (state.layer === 'detail') rerenderDetail();
+  }, 200));
   window.addEventListener('hashchange', receiveFromHash);
   $content.addEventListener('scroll', () => { if (picked) clearPick(); }, { passive: true });
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });

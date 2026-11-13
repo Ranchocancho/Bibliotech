@@ -391,3 +391,27 @@ img { display: block; }
 .fine { margin: 0; font-size: 11px; color: #8d7a63; }
 .person-body .result { cursor: default; }
 .fsheet > * { flex-shrink: 0; }
+
+/* v6 · barra de la balda: lupa como icono, géneros en desplegable */
+.tool-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); background: rgba(22, 14, 8, .85); color: #c9a77c; cursor: pointer; }
+.tool-btn svg { width: 18px; height: 18px; }
+.shelf-tools .sort { min-width: 0; }
+.shelf-tools .gsel { flex: 1; }
+.shelf-tools .sort select { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+.shelf-tools .gsel.on select { border-color: var(--amber); color: var(--amber); }
+
+/* v6 · valor */
+.gchip.val { cursor: pointer; }
+.gchip.val em, .card em, .stat b.up, .stat b.down { font-style: normal; }
+.up { color: #8fd18a; } .down { color: #e58b7a; }
+.gchip.val.stale { opacity: .75; }
+.vgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vgrid .field input { width: 100%; min-width: 0; box-sizing: border-box; }
+.vh { margin: 6px 0 0; font: 700 13px var(--sans); color: var(--muted); }
+.vlinks { display: flex; flex-wrap: wrap; gap: 8px; }
+.vlinks .btn { flex: 1 1 auto; height: 42px; text-decoration: none; font-size: 13.5px; }
+.stat-grid.v3 { grid-template-columns: repeat(3, 1fr); margin: 8px 0; }
+.stat-grid.v3 .stat b { font-size: 17px; }
+
+/* v6 · al soltar el dedo, la portada se ve en grande */
+.scrub-tip:not(.live) img, .scrub-tip:not(.live) i { width: 66px; height: 88px; }
