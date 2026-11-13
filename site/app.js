@@ -242,12 +242,26 @@
         <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor}">
           <div class="cover">${coverInner(it)}</div></div></button>`;
     }
-    const art = it.full ? `background-image:url('${cssUrl(it.full)}');background-size:auto 100%;background-position:50% 0`
-      : it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
     return `<button class="item spine${cls}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="transform:rotate(${tilt}deg)">${mark}
-      <div class="body" style="width:${p.sw}px;height:${p.h}px;background:${p.caseColor}">
-        <div style="height:14px;flex:none"></div><div class="art" style="${art}"><span>${esc(it.title)}</span></div><div style="height:16px;flex:none"></div>
-      </div></button>`;
+      <div class="body" style="width:${p.sw}px;height:${p.h}px;background:${p.caseColor}">${spineInner(it, p)}</div></button>`;
+  }
+  // Lomo: el escaneado oficial si existe (lomo suelto o la carátula completa abierta);
+  // si no, uno hecho a imagen del oficial: franja de la consola arriba y el arte debajo
+  const SPINE_BAND = {
+    ds: ['#f4f4f4', '#6b6b6b', 'DS'], '3ds': ['#f4f4f4', '#c8102e', '3DS'],
+    switch: ['#e60012', '#fff', 'sw'], switch2: ['#e60012', '#fff', 'sw2'],
+    ps4: ['#003791', '#fff', 'PS4'], ps5: ['#f4f4f4', '#111', 'PS5'],
+    dvd: ['#111', '#eee', 'DVD'], bluray: ['#0b5cad', '#fff', 'Blu-ray']
+  };
+  const SW_LOGO = (c) => `<svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><rect x=".6" y=".6" width="4" height="8.8" rx="2" fill="none" stroke="${c}" stroke-width="1.1"/><circle cx="2.6" cy="3" r=".9" fill="${c}"/><path d="M5.5 .6h1.9a2 2 0 0 1 2 2v4.8a2 2 0 0 1-2 2H5.5z" fill="${c}"/><circle cx="7.4" cy="6.4" r=".9" fill="#e60012"/></svg>`;
+  function spineInner(it, p) {
+    // La carátula completa de GameTDB es la edición española/europea: va primero
+    if (it.full) return `<div class="sp-real" style="background-image:url('${cssUrl(it.full)}');background-size:${2 * p.w + p.sw}px ${p.h}px"></div>`;
+    if (it.spine) return `<div class="sp-real" style="background-image:url('${cssUrl(it.spine)}')"></div>`;
+    const [bg, fg, txt] = SPINE_BAND[it.plat] || ['#222', '#fff', p.short];
+    const logo = txt.startsWith('sw') ? SW_LOGO(fg) + (txt === 'sw2' ? '<b style="color:#fff">2</b>' : '') : `<b style="color:${fg}">${esc(txt)}</b>`;
+    const art = it.front ? `background-image:url('${cssUrl(it.front)}')` : `background:${colorFor(it.title)}`;
+    return `<div class="sp-band" style="background:${bg}">${logo}</div><div class="art" style="${art}"><span>${esc(it.title)}</span></div>`;
   }
 
   const SORTS = [['title', 'A–Z'], ['added', 'Recientes'], ['year', 'Año'], ['plat', 'Consola']];
@@ -984,6 +998,10 @@
     for (const it of state.items) {
       const ref = String(it.ref);
       try {
+        if (it.kind === 'game' && !it.spinev && !it.spine) { // lomos oficiales (catálogo nuevo)
+          const g = await findGame(it.plat, ref).catch(() => null);
+          if (g && g.v11) { if (g.spine) it.spine = g.spine; it.spinev = 1; changed = true; }
+        }
         const needImg = ref.startsWith('t:') && (it.imgv || 0) < 3 && (!it.back || !it.media);
         if (it.kind === 'game' && (it.genres === undefined || needImg)) {
           const g = await findGame(it.plat, ref).catch(() => null);
@@ -1247,9 +1265,9 @@
   function gameFromRow(plat, g) {
     if (typeof g[0] === 'string' && g[0].startsWith('t:')) {
       return { plat, ref: g[0], title: g[1], year: g[2] || null, front: null, back: null, media: null, full: null, region: g[7] || 'WW', tdb: g[0].slice(2), genres: g[8] || [], editions: g[9] || [],
-        lb: { front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]) } };
+        lb: { front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]) }, spine: imgUrl(g[10]), v11: g.length > 10 };
     }
-    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null, genres: g[8] || [] };
+    return { plat, ref: g[0], title: g[1], year: g[2] || null, front: imgUrl(g[3]), back: imgUrl(g[4]), media: imgUrl(g[5]), full: null, genres: g[8] || [], spine: imgUrl(g[10]), v11: g.length > 10 };
   }
 
   // ---------- Imágenes de GameTDB (se buscan al añadir) ----------
@@ -1412,7 +1430,7 @@
     if (state.items.find((m) => m.kind === kind && m.plat === plat && String(m.ref) === String(r.ref))) return false;
     const it = {
       uid: uid(), kind, plat, ref: r.ref, title: r.title, year: r.year || null,
-      front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null,
+      front: r.front || null, back: r.back || null, media: r.media || null, full: r.full || null, spine: r.spine || null, spinev: 1,
       genres: Array.isArray(r.genres) ? r.genres.slice(0, 6) : [], wish: !!wish, imgv: 3,
       face: countFace(PLAT[plat].coll) < 4, added: Date.now()
     };
@@ -1615,7 +1633,7 @@
       i: state.items.map((it) => {
         const w = it.wish ? 1 : 0; const g = itemGenres(it); const dy = [it.seen ? 1 : 0, it.rating || 0];
         if (it.kind === 'game' && typeof it.ref === 'number') return [0, it.plat, it.ref, it.face ? 1 : 0, w, g, ...dy];
-        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g, ...dy];
+        if (it.kind === 'game') return [2, it.plat, String(it.ref), it.title, it.year || 0, shortU(it.front), shortU(it.full), shortU(it.media), it.face ? 1 : 0, shortU(it.back), w, g, ...dy, shortU(it.spine)];
         return [1, it.plat, it.title, it.year || 0, shortU(it.front), it.face ? 1 : 0, String(it.tmdbRef || it.ref), w, g, ...dy];
       })
     };
@@ -1643,7 +1661,7 @@
       } else if (x[0] === 1 && PLAT[x[1]].coll === 'mov') {
         items.push({ uid: uid(), kind: 'movie', plat: x[1], ref: String(x[6] || x[2]).slice(0, 200), title: String(x[2]).slice(0, 200), year: Number(x[3]) || null, front: longU(x[4]), back: null, media: null, full: null, face: !!x[5], wish: !!x[7], genres: cleanG(x[8]) || [], seen: !!x[9], rating: clampR(x[10]) });
       } else if (x[0] === 2 && PLAT[x[1]].coll !== 'mov') {
-        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [], seen: !!x[12], rating: clampR(x[13]) });
+        items.push({ uid: uid(), kind: 'game', plat: x[1], ref: String(x[2]).slice(0, 200), title: String(x[3]).slice(0, 200), year: Number(x[4]) || null, front: longU(x[5]), full: longU(x[6]), media: longU(x[7]), back: longU(x[9]), face: !!x[8], wish: !!x[10], genres: cleanG(x[11]) || [], seen: !!x[12], rating: clampR(x[13]), spine: longU(x[14]) });
       }
     }
     return { name, items };
@@ -1752,7 +1770,7 @@
         if (j.app !== 'ludoteca' || !Array.isArray(j.items)) throw new Error('x');
         const clean = j.items.filter((i) => i && PLAT[i.plat] && i.title).map((i) => ({
           uid: String(i.uid || uid()), kind: i.kind === 'movie' ? 'movie' : 'game', plat: i.plat, ref: i.ref, title: String(i.title),
-          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined,
+          year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), spine: safeImg(i.spine), spinev: Number(i.spinev) || 0, face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined,
           paid: isNum(i.paid) ? i.paid : undefined, value: isNum(i.value) ? i.value : undefined, valueAt: Number(i.valueAt) || undefined,
           paidAt: typeof i.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) ? i.paidAt : undefined
         }));
