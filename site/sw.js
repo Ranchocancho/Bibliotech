@@ -1,5 +1,5 @@
 /* Ludoteca – service worker: funciona sin conexión y guarda las portadas. */
-const VERSION = 'ludoteca-v7';
+const VERSION = 'ludoteca-v7.1';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 const COVERS = 'ludo-covers';
 const FONTS = 'ludo-fonts';

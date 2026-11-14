@@ -461,3 +461,7 @@ img { display: block; }
 .mc[aria-pressed="true"] { border-color: var(--amber); }
 .mc img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .mc small { font-weight: 400; }
+.cb-syn { font: 400 .8em/1.42 var(--sans) !important; opacity: .92; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 10; overflow: hidden; }
+.cb-syn.wait { opacity: .6; font-style: italic !important; }
+.cb-src { display: block; margin-top: .3em; font-size: .85em; opacity: .7; }
+.fsheet .hint a { color: var(--amber); }

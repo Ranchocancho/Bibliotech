@@ -487,9 +487,10 @@
       ${it.front ? `<div class="cb-art" style="background-image:url('${cssUrl(it.front)}')"></div>` : ''}
       <div class="cb-body"><div class="cb-title">${esc(it.title)}</div>
       ${it.series ? `<p>${esc(it.series)}${it.num ? ` · nº ${esc(it.num)}` : ''}</p>` : ''}
+      ${it.cinfo && it.cinfo.syn ? `<p class="cb-syn">${esc(it.cinfo.syn)}</p>` : comicBusy[it.uid] ? '<p class="cb-syn wait">Buscando la sinopsis…</p>' : ''}
       ${it.authors ? `<p class="cb-auth">${esc(it.authors)}</p>` : ''}
       <div class="mb-grow"></div>
-      <div class="cb-foot">${esc([it.publisher, it.year].filter(Boolean).join(' · '))}${it.isbn ? `<br>ISBN ${esc(it.isbn)}` : ''}</div></div></div>`;
+      <div class="cb-foot">${esc([it.publisher, it.year].filter(Boolean).join(' · '))}${it.isbn ? `<br>ISBN ${esc(it.isbn)}` : ''}${it.cinfo && it.cinfo.syn ? `<span class="cb-src">Texto: ${esc(it.cinfo.src)}</span>` : ''}</div></div></div>`;
   }
 
   function plainBack(p) {
@@ -732,6 +733,7 @@
     requestAnimationFrame(() => requestAnimationFrame(() => goPreset('front')));
     if (!tiltOn && 'DeviceOrientationEvent' in window) { window.addEventListener('deviceorientation', onTilt); tiltOn = true; }
     if (item.kind === 'movie' && !item.tmdb) loadMovieData(item);
+    if (item.kind === 'comic' && !(item.cinfo && item.cinfo.at)) loadComicData(item);
     bindFichaHandle();
   }
 
@@ -1148,6 +1150,60 @@
     }
   }
 
+  // ---------- Cómics: sinopsis (Wikipedia en español y, si no, Open Library) ----------
+  const comicBusy = {};
+  const COMIC_RX = /historieta|c[oó]mic|novela gr[aá]fica|tebeo|manga|vi[nñ]eta|dibujante|guionista|bande dessin|tira/i;
+  const comicQ = (t) => String(t || '').replace(/\b(vol(umen)?\.?|tomo|n[ºo°]\.?|parte)\s*\d+.*$/i, '').replace(/\[.*?\]|\(.*?\)/g, '').trim();
+  async function wikiComic(q) {
+    const sr = await fetch('https://es.wikipedia.org/w/api.php?' + new URLSearchParams({ action: 'query', list: 'search', srsearch: `${q} historieta OR cómic`, srlimit: '5', format: 'json', origin: '*' })).then((r) => r.json());
+    const want = norm(q).split(' ').filter((w) => w.length > 2);
+    const hits = ((sr.query || {}).search || []).filter((h) => { const t = norm(h.title); return want.length && want.filter((w) => t.includes(w)).length >= Math.ceil(want.length / 2); });
+    for (const h of hits.slice(0, 3)) {
+      const j = await fetch('https://es.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(h.title.replace(/ /g, '_'))).then((r) => r.json()).catch(() => null);
+      if (j && j.type === 'standard' && j.extract && COMIC_RX.test(j.extract + ' ' + (j.description || ''))) {
+        return { syn: j.extract, src: 'Wikipedia', url: (j.content_urls && j.content_urls.mobile && j.content_urls.mobile.page) || '' };
+      }
+    }
+    return null;
+  }
+  async function olDescription(it) {
+    const ref = String(it.ref || '');
+    let key = ref.startsWith('olw:') ? '/works/' + ref.slice(4) : null;
+    if (!key && it.isbn) {
+      const e = await fetch(`${OL}/isbn/${encodeURIComponent(it.isbn)}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      key = e && e.works && e.works[0] && e.works[0].key;
+    }
+    if (!key || !/^\/works\/OL\d+W$/.test(key)) return null;
+    const w = await fetch(`${OL}${key}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    let d = w && w.description; if (d && typeof d === 'object') d = d.value;
+    if (!d || typeof d !== 'string') return null;
+    d = d.split(/\n-{3,}/)[0].replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+    return d.length > 40 ? { syn: d.slice(0, 1600), src: 'Open Library', url: `${OL}${key}`, en: true } : null;
+  }
+  async function ensureComicInfo(it) {
+    if (it.kind !== 'comic' || comicBusy[it.uid]) return false;
+    if (it.cinfo && (it.cinfo.syn || Date.now() - (it.cinfo.at || 0) < 30 * DAY)) return false;
+    comicBusy[it.uid] = true;
+    try {
+      const tries = [comicQ(it.title)];
+      if (it.series && !/^(dc comics|marvel|colecci)/i.test(it.series)) tries.push(comicQ(it.series));
+      let r = null;
+      for (const q of [...new Set(tries)].filter((x) => x.length > 1)) { r = await wikiComic(q).catch(() => null); if (r) break; }
+      if (!r) r = await olDescription(it).catch(() => null);
+      it.cinfo = Object.assign({ syn: '', at: Date.now() }, r || {});
+      saveOwner(it);
+      return !!r;
+    } finally { delete comicBusy[it.uid]; }
+  }
+  async function loadComicData(it) {
+    if (state.detail && state.detail.item === it) rerenderDetail();
+    const ok = await ensureComicInfo(it);
+    if (state.detail && state.detail.item === it) {
+      rerenderDetail();
+      const f = $layers.querySelector('.sub.ficha'); if (f && ok) f.querySelector('.fsheet').innerHTML = fichaInner(it);
+    }
+  }
+
   // ---------- Ficha desplegable ----------
   const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
   function fichaSummary(it) {
@@ -1202,7 +1258,11 @@
       }
     } else if (isC) {
       const row = (k, v) => v ? `<div class="crow"><small>${k}</small><span>${esc(v)}</span></div>` : '';
-      body = `<div class="cinfo">${row('Colección', it.series ? `${it.series}${it.num ? ` · nº ${it.num}` : ''}` : (it.num ? `Nº ${it.num}` : ''))}${row('Autores', it.authors)}
+      const ci = it.cinfo || {};
+      const syn = ci.syn ? `<p class="syn" id="syn">${esc(ci.syn)}</p>${ci.syn.length > 220 ? '<button class="linkish" data-act="synMore">Leer más</button>' : ''}
+        <p class="hint">${ci.en ? 'Sinopsis en inglés, de Open Library' : 'Sinopsis de Wikipedia'}${ci.url ? ` · <a href="${esc(ci.url)}" target="_blank" rel="noopener">ver la fuente</a>` : ''}</p>`
+        : comicBusy[it.uid] ? '<p class="hint">Buscando la sinopsis…</p>' : '';
+      body = `${syn}<div class="cinfo">${row('Colección', it.series ? `${it.series}${it.num ? ` · nº ${it.num}` : ''}` : (it.num ? `Nº ${it.num}` : ''))}${row('Autores', it.authors)}
         ${row('Editorial', it.publisher)}${row('Año', it.year ? String(it.year) : '')}${row('Formato', PLAT[it.plat].short)}${row('ISBN', it.isbn)}</div>
         ${ro ? '' : '<button class="btn btn-ghost" data-act="comicEdit">Editar datos</button>'}`;
     } else {
@@ -1217,6 +1277,7 @@
     const el = openSub(`<div class="fs-dim" data-act="closeSub"></div><div class="fsheet" role="dialog" aria-label="Ficha de ${esc(it.title)}">${fichaInner(it)}</div>`, 'ficha');
     bindFicha(el, it);
     if (it.kind === 'movie') { if (!it.tmdb) loadMovieData(it); else loadSaga(it); }
+    if (it.kind === 'comic' && !(it.cinfo && it.cinfo.at)) loadComicData(it);
   }
   function refreshFicha() {
     const it = state.detail && state.detail.item; const el = $layers.querySelector('.sub.ficha');
@@ -1700,9 +1761,11 @@
     const snapS = snapshot();
     if (manual.edit) {
       const it = state.items.find((x) => x.uid === manual.edit); if (!it) return;
+      if (it.title !== data.title || (it.series || '') !== data.series) delete it.cinfo;
       Object.assign(it, data, { plat: manual.cfmt, front: manual.cover || it.front || null });
       if (!manual.cover) it.front = null;
       saveItems(); state.detail.item = it; closeSub(); closeSub(); rerenderDetail(); render();
+      if (!it.cinfo) loadComicData(it);
       setTimeout(() => toastUndo('Datos guardados', snapS), 0); return;
     }
     const r = Object.assign({ ref: manual.isbn ? 'isbn:' + manual.isbn : 'm:' + uid(), isbn: manual.isbn || '', front: manual.cover }, data);
