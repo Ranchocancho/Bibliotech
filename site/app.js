@@ -69,6 +69,7 @@
   const imgUrl = (file) => (file ? IMG_BASE + file : null);
 
   const I = {
+    camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
@@ -104,7 +105,14 @@
     add: null,             // { coll, fmt }
     layer: null            // 'detail' | 'add' | 'share' | 'settings' | 'scan'
   };
-  const saveItems = () => LS.set('ludo.items', state.items);
+  // Las fotos propias viven en IndexedDB; en memoria la portada es una URL temporal (blob:)
+  // que nunca se guarda: se guarda la imagen del catálogo que había debajo
+  function itemReplacer(k, v) {
+    if (k && k[0] === '_') return undefined;
+    if (k === 'front' && this && this._url) return this._orig || null;
+    return v;
+  }
+  const saveItems = () => { try { localStorage.setItem('ludo.items', JSON.stringify(state.items, itemReplacer)); } catch (e) { toast('No se ha podido guardar en este dispositivo'); } };
   const saveFriends = () => LS.set('ludo.friends', state.friends);
   let installPrompt = null;
 
@@ -196,7 +204,7 @@
     } else if (state.mode === 'wish') {
       $dock.innerHTML = `<span>Lo que te gustaría tener</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la lista de deseos">${I.plus}Deseo</button>`;
     } else {
-      $dock.innerHTML = `<span>${items.length ? 'Desliza el dedo sobre la balda' : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
+      $dock.innerHTML = `<span>${items.length ? (viewMode() === 'feed' ? 'Desliza hacia abajo' : 'Desliza el dedo sobre la balda') : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
     }
   }
 
@@ -412,6 +420,7 @@
       return;
     }
     if (!list.length) { $rows.innerHTML = `<p class="hint" style="text-align:center;margin:28px 20px">Nada coincide con el filtro.</p>`; return; }
+    if (viewMode() === 'feed') { $rows.innerHTML = feedHTML(list, readOnly); return; }
     const max = shelfWidth();
     $rows.innerHTML = pack(list, max).map((r) => {
       const last = r.items[r.items.length - 1];
@@ -420,6 +429,20 @@
     }).join('');
     $rows.querySelectorAll('.shelf-row').forEach(bindScrub);
     fillShelves($rows, coll);
+  }
+  // Vista «carrusel»: portadas grandes, una tras otra, deslizando hacia abajo
+  const viewMode = () => (LS.get('ludo.view', 'shelf') === 'feed' ? 'feed' : 'shelf');
+  function feedHTML(list, readOnly) {
+    const W = Math.min(window.innerWidth * 0.74, 330);
+    return `<div class="feed">${list.map((it) => {
+      const p = PLAT[it.plat]; const k = W / p.w; const both = readOnly && !it.wish && !!ownMatch(it);
+      const meta = it.kind === 'comic' ? [it.series ? `${it.series}${it.num ? ` nº ${it.num}` : ''}` : '', it.authors].filter(Boolean).join(' · ')
+        : [p.short, it.year].filter(Boolean).join(' · ');
+      return `<div class="fcard"><button class="fc-hit${it.wish ? ' wish' : ''}${p.book ? ' book' : ''}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${esc(it.title)}" style="width:${Math.round(W)}px;height:${Math.round(p.h * k)}px">
+        ${both ? `<i class="both" aria-hidden="true">${I.check}</i>` : ''}
+        <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor};transform:scale(${k.toFixed(4)})"><div class="cover">${coverInner(it)}</div></div></button>
+        <div class="fc-meta"><b>${esc(it.title)}</b><span>${esc(meta)}${it.wish ? ' · lo quieres' : ''}</span></div></div>`;
+    }).join('')}</div>`;
   }
   // Baldas vacías hasta el final de la pantalla: siempre parece una estantería
   function fillShelves($rows, coll) {
@@ -906,21 +929,126 @@
         return `<button class="alt ${cur ? 'cur' : ''}" data-act="altPick" data-i="${altList.length - 1}" aria-label="${esc(title)}: ${esc(x.label)}"><img src="${esc(x.url)}" alt="" loading="lazy"><small>${esc(x.label)}</small></button>`;
       }).join('')}</div>`;
     };
-    const html = sec('front', 'Portada') + sec('back', 'Contraportada') + sec('media', p.media === 'disc' ? 'Disco' : 'Cartucho');
-    el.querySelector('.alt-body').innerHTML = html
-      ? `<p class="hint">Toca la que coincida con tu caja. Se guarda al momento.</p>${html}`
-      : `<p class="hint">No hay más imágenes de esta caja en los catálogos.${String(it.ref).startsWith('w:') ? ' Viene de Wikipedia, que solo tiene la portada.' : ''}</p>`;
+    const html = sec('front', 'Portada') + sec('back', 'Contraportada') + (p.book ? '' : sec('media', p.media === 'disc' ? 'Disco' : 'Cartucho'));
+    const mine = `<div class="photo-box"><button class="btn btn-amber" data-act="photo">${I.camera}Hacer una foto a tu portada</button>
+      ${it.photo ? '<button class="btn btn-ghost" data-act="photoDel">Quitar mi foto</button>' : ''}<p class="hint">Se queda solo en este móvil. Tus amigos verán la del catálogo.</p></div>`;
+    el.querySelector('.alt-body').innerHTML = mine + (html
+      ? `<p class="hint">O toca la que coincida con tu caja. Se guarda al momento.</p>${html}`
+      : `<p class="hint">No hay más imágenes de esta caja en los catálogos.${String(it.ref).startsWith('w:') ? ' Viene de Wikipedia, que solo tiene la portada.' : ''}</p>`);
   }
   async function pickAlt(i) {
     const a = altList[i]; const d = state.detail; if (!a || !d) return;
     const it = state.items.find((x) => x.uid === d.item.uid); if (!it) return;
     let url = a.big; const snapI = snapshot();
     if (url.includes('art.gametdb.com') && !(await probe(url))) url = url.replace(/\/(cover|back)HQ\//, '/$1M/');
+    if (a.k === 'front' && it.photo) dropPhoto(it);
     it[a.k] = url;
     if (a.k === 'back') it.full = it.full || null;
     saveItems(); cacheImgs([url]);
     d.item = it; closeSub(); rerenderDetail(); render();
     toastUndo('Imagen cambiada', snapI);
+  }
+
+  // ---------- Fotos propias (se quedan en este móvil) ----------
+  const Photos = (() => {
+    let dbp = null;
+    const db = () => dbp || (dbp = new Promise((ok, ko) => {
+      const r = indexedDB.open('ludo-photos', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('p');
+      r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error);
+    }));
+    const tx = async (mode, fn) => { const d = await db(); return new Promise((ok, ko) => { const t = d.transaction('p', mode); const req = fn(t.objectStore('p')); t.oncomplete = () => ok(req && req.result); t.onerror = () => ko(t.error); }); };
+    return {
+      put: (k, blob) => tx('readwrite', (st) => st.put(blob, k)),
+      del: (k) => tx('readwrite', (st) => st.delete(k)),
+      get: (k) => tx('readonly', (st) => st.get(k)),
+      keys: () => tx('readonly', (st) => st.getAllKeys())
+    };
+  })();
+  const photoURLs = {};
+  function applyPhoto(it, key, blob) {
+    if (!blob) return;
+    if (photoURLs[key]) URL.revokeObjectURL(photoURLs[key]);
+    const url = photoURLs[key] = URL.createObjectURL(blob);
+    if (!it._url) it._orig = it.front || null;
+    it._url = url; it.front = url; it.photo = key;
+  }
+  function dropPhoto(it) {
+    if (!it.photo) return;
+    Photos.del(it.photo).catch(() => {});
+    if (it._url) { it.front = it._orig || null; }
+    delete it._url; delete it._orig; delete it.photo;
+  }
+  async function loadPhotos() {
+    const own = state.items.filter((i) => i.photo); if (!own.length && !window.indexedDB) return;
+    try {
+      const keys = new Set(await Photos.keys());
+      for (const it of own) { if (keys.has(it.photo)) applyPhoto(it, it.photo, await Photos.get(it.photo)); else delete it.photo; }
+      const used = new Set(state.items.map((i) => i.photo).filter(Boolean));
+      keys.forEach((k) => { if (!used.has(k)) Photos.del(k).catch(() => {}); });
+      if (own.length) render();
+    } catch (e) { /* sin IndexedDB: se quedan las del catálogo */ }
+  }
+  // Elegir foto (cámara o galería) y encuadrarla con el formato de la caja
+  function pickPhoto(aspect, done) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) openCropper(f, aspect, done); };
+    inp.click();
+  }
+  let crop = null;
+  function openCropper(file, aspect, done) {
+    const url = URL.createObjectURL(file);
+    const el = openSub(`<div class="layer-head"><h2>Encuadra la portada</h2><button class="icon-btn" data-act="closeSub" aria-label="Cerrar">${I.close}</button></div>
+      <div class="body crop-body"><div class="crop-frame" id="cropFrame" style="aspect-ratio:${aspect}"><img id="cropImg" alt="" draggable="false"></div>
+      <p class="hint">Arrastra para mover y pellizca para acercar.</p>
+      <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+      <div class="row"><button class="btn btn-ghost" data-act="cropAgain">Otra foto</button><button class="btn btn-amber" data-act="cropSave">Guardar</button></div></div>`, 'sheet');
+    const img = el.querySelector('#cropImg'); const frame = el.querySelector('#cropFrame'); const zoom = el.querySelector('#cropZoom');
+    crop = { url, img, frame, aspect, done, x: 0, y: 0, z: 1, base: 1 };
+    const fit = () => { const fw = frame.clientWidth, fh = frame.clientHeight; crop.base = Math.max(fw / img.naturalWidth, fh / img.naturalHeight); crop.x = (fw - img.naturalWidth * crop.base) / 2; crop.y = (fh - img.naturalHeight * crop.base) / 2; draw(); };
+    const clamp = () => { const fw = frame.clientWidth, fh = frame.clientHeight; const w = img.naturalWidth * crop.base * crop.z, h = img.naturalHeight * crop.base * crop.z; crop.x = Math.min(0, Math.max(fw - w, crop.x)); crop.y = Math.min(0, Math.max(fh - h, crop.y)); };
+    const draw = () => { clamp(); img.style.transform = `translate(${crop.x}px, ${crop.y}px) scale(${crop.base * crop.z})`; };
+    const zoomTo = (z, cx, cy) => { z = Math.max(1, Math.min(4, z)); const k = z / crop.z; crop.x = cx - (cx - crop.x) * k; crop.y = cy - (cy - crop.y) * k; crop.z = z; zoom.value = z; draw(); };
+    img.onload = fit; img.src = url;
+    zoom.addEventListener('input', () => zoomTo(Number(zoom.value), frame.clientWidth / 2, frame.clientHeight / 2));
+    const pts = new Map(); let last = null;
+    frame.addEventListener('pointerdown', (e) => { frame.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); last = null; });
+    frame.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 1) { crop.x += e.clientX - prev[0]; crop.y += e.clientY - prev[1]; draw(); return; }
+      const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      const r = frame.getBoundingClientRect();
+      if (last) zoomTo(crop.z * d / last, (a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top);
+      last = d;
+    });
+    const up = (e) => { pts.delete(e.pointerId); last = null; };
+    frame.addEventListener('pointerup', up); frame.addEventListener('pointercancel', up);
+  }
+  function cropSave() {
+    if (!crop || !crop.img.naturalWidth) return;
+    const H = 900; const W = Math.round(H * crop.aspect);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const k = W / crop.frame.clientWidth; const sc = crop.base * crop.z * k;
+    const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    g.drawImage(crop.img, crop.x * k, crop.y * k, crop.img.naturalWidth * sc, crop.img.naturalHeight * sc);
+    const c = crop; crop = null;
+    cv.toBlob((blob) => { URL.revokeObjectURL(c.url); closeSub(); if (blob) c.done(blob); }, 'image/jpeg', 0.85);
+  }
+  const coverAspect = (it) => { const p = PLAT[it.plat]; return p.book ? p.w / p.h : p.w / (p.h - 13); };
+  async function setPhoto(it, blob) {
+    const key = 'p:' + it.uid + ':' + Date.now();
+    try { await Photos.put(key, blob); } catch (e) { toast('No se ha podido guardar la foto en este móvil'); return false; }
+    if (it.photo) Photos.del(it.photo).catch(() => {});
+    applyPhoto(it, key, blob); saveItems(); return true;
+  }
+  function photoForDetail() {
+    const it = state.items.find((x) => x.uid === state.detail.item.uid); if (!it) return;
+    pickPhoto(coverAspect(it), async (blob) => {
+      if (!(await setPhoto(it, blob))) return;
+      state.detail.item = it; closeSub(); rerenderDetail(); render(); toast('Portada cambiada por tu foto');
+    });
   }
 
   // ---------- Géneros y etiquetas ----------
@@ -1728,14 +1856,15 @@
         <button class="btn btn-amber" data-act="mSave" style="height:50px">${manual.edit ? 'Guardar' : 'Añadir a la estantería'}</button></div>`;
   }
   function coversHTML() {
-    const tile = (u, label) => `<button class="mc" data-act="mCoverPick" ${u ? `data-u="${esc(u)}"` : ''} aria-pressed="${(manual.cover || null) === (u || null)}" aria-label="${esc(label)}">${u ? `<img src="${esc(u.replace(/-L\.jpg$/, '-M.jpg'))}" alt="" loading="lazy">` : '<span>Sin portada<br><small>diseño propio</small></span>'}</button>`;
-    return tile(null, 'Sin portada') + (manual.cover && !manual.covers.includes(manual.cover) ? tile(manual.cover, 'Portada actual') : '') + manual.covers.map((u) => tile(u, 'Portada')).join('');
+    const tile = (u, label) => `<button class="mc" data-act="mCoverPick" ${u ? `data-u="${esc(u)}"` : ''} aria-pressed="${(manual.cover || null) === (u || null)}" aria-label="${esc(label)}">${u ? `<img src="${esc(u.startsWith('blob:') ? u : u.replace(/-L\.jpg$/, '-M.jpg'))}" alt="" loading="lazy">` : '<span>Sin portada<br><small>diseño propio</small></span>'}</button>`;
+    const shot = `<button class="mc shot" data-act="mPhoto" aria-label="Hacer una foto a la portada">${I.camera}<span>Hacer foto</span></button>`;
+    return shot + tile(null, 'Sin portada') + (manual.cover && !manual.covers.includes(manual.cover) ? tile(manual.cover, manual.cover === manual.blobUrl ? 'Tu foto' : 'Portada actual') : '') + manual.covers.map((u) => tile(u, 'Portada')).join('');
   }
   function openManual(edit) {
     const a = state.add || {};
     const q = (document.getElementById('q') || {}).value || '';
     const isbn = isbnOf(q);
-    manual = { edit: edit ? edit.uid : null, cfmt: edit ? edit.plat : (a.cfmt || 'tomo'), cover: edit ? edit.front || null : null, covers: [], isbn: edit ? edit.isbn : isbn };
+    manual = { edit: edit ? edit.uid : null, cfmt: edit ? edit.plat : (a.cfmt || 'tomo'), cover: edit ? edit.front || null : null, covers: [], isbn: edit ? edit.isbn : isbn, blob: null, blobUrl: null };
     openSub(manualHTML(edit || { title: isbn ? '' : q }), 'sheet');
     const t = document.getElementById('mTitle'); if (t && !edit) setTimeout(() => t.focus(), 60);
   }
@@ -1762,15 +1891,20 @@
     if (manual.edit) {
       const it = state.items.find((x) => x.uid === manual.edit); if (!it) return;
       if (it.title !== data.title || (it.series || '') !== data.series) delete it.cinfo;
-      Object.assign(it, data, { plat: manual.cfmt, front: manual.cover || it.front || null });
-      if (!manual.cover) it.front = null;
+      const usePhoto = manual.blob && manual.cover === manual.blobUrl;
+      if (!usePhoto && manual.cover !== it.front) dropPhoto(it);
+      Object.assign(it, data, { plat: manual.cfmt });
+      if (!usePhoto && !it.photo) it.front = manual.cover || null;
+      if (usePhoto) setPhoto(it, manual.blob).then(() => { rerenderDetail(); render(); });
       saveItems(); state.detail.item = it; closeSub(); closeSub(); rerenderDetail(); render();
       if (!it.cinfo) loadComicData(it);
       setTimeout(() => toastUndo('Datos guardados', snapS), 0); return;
     }
-    const r = Object.assign({ ref: manual.isbn ? 'isbn:' + manual.isbn : 'm:' + uid(), isbn: manual.isbn || '', front: manual.cover }, data);
+    const usePhoto = manual.blob && manual.cover === manual.blobUrl;
+    const r = Object.assign({ ref: manual.isbn ? 'isbn:' + manual.isbn : 'm:' + uid(), isbn: manual.isbn || '', front: usePhoto ? null : manual.cover }, data);
     const wish = !!(state.add && state.add.wish);
     if (addItem(r, 'comic', manual.cfmt, wish)) {
+      if (usePhoto) { const it = state.items.find((x) => x.ref === r.ref && x.plat === manual.cfmt); if (it) setPhoto(it, manual.blob).then(() => render()); }
       closeSub();
       state.tab = 'com'; LS.set('ludo.tab', 'com'); state.mode = wish ? 'wish' : 'mine'; state.friendId = null; render();
       toastUndo(`${title} añadido a tu estantería`, snapS);
@@ -1870,7 +2004,7 @@
   }
   const WIKI = 'https://upload.wikimedia.org/wikipedia/';
   const SHORT = [['~', WIKI], ['^', 'https://art.gametdb.com/'], ['*', 'https://image.tmdb.org/t/p/'], ['!', 'https://images.launchbox-app.com/'], ['@', 'https://covers.openlibrary.org/b/id/']];
-  const shortU = (u) => { if (!u) return ''; const m = SHORT.find(([, p]) => u.startsWith(p)); return m ? m[0] + u.slice(m[1].length) : u; };
+  const shortU = (u) => { if (!u || String(u).startsWith('blob:')) return ''; const m = SHORT.find(([, p]) => u.startsWith(p)); return m ? m[0] + u.slice(m[1].length) : u; };
   const longU = (u) => { if (typeof u !== 'string' || !u) return null; const m = SHORT.find(([k]) => u[0] === k); return safeImg(m ? m[1] + u.slice(1) : u); };
   async function encodeShare() {
     const payload = {
@@ -1978,6 +2112,8 @@
       <div class="layer-head"><h2>Ajustes</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
       <div class="body scroll">
         ${installPrompt ? `<div class="card"><h3>Instalar en el móvil</h3><p>Ludoteca se abrirá como una app más, a pantalla completa y sin conexión.</p><button class="btn btn-amber" data-act="install">${I.download}Instalar Ludoteca</button></div>` : ''}
+        <div class="card"><h3>Cómo se ve</h3><p>La estantería con lomos, o tus portadas en grande, una detrás de otra.</p>
+          <div class="pills" role="group" aria-label="Vista">${[['shelf', 'Estantería'], ['feed', 'Carrusel de portadas']].map(([v, n]) => `<button data-act="setView" data-id="${v}" aria-pressed="${viewMode() === v}">${n}</button>`).join('')}</div></div>
         <div class="card"><h3>Tus estanterías</h3><p>Ponlas en el orden que prefieras y oculta las que no uses. Cada persona lo elige en su móvil.</p>
           <div class="order-list" id="orderList">${orderListHTML()}</div></div>
         <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Al guardar se abre el menú de compartir: elige Google Drive, tu correo o un chat contigo mismo. Para recuperarla, elige ese archivo.</p>
@@ -1997,8 +2133,11 @@
     const own = state.items.length;
     return own >= 5 && Date.now() - lastBackup() > 30 * DAY && Date.now() - (Number(LS.get('ludo.backupNag', 0)) || 0) > 3 * DAY;
   }
+  const blobToData = (b) => new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => ok(null); r.readAsDataURL(b); });
   async function exportBackup() {
-    const data = JSON.stringify({ app: 'ludoteca', v: 1, saved: Date.now(), name: state.name, items: state.items, friends: state.friends });
+    const photos = {};
+    for (const it of state.items.filter((i) => i.photo)) { try { const b = await Photos.get(it.photo); if (b) photos[it.photo] = await blobToData(b); } catch (e) { /* sigue */ } }
+    const data = JSON.stringify({ app: 'ludoteca', v: 1, saved: Date.now(), name: state.name, items: state.items, friends: state.friends, photos }, itemReplacer);
     const name = `ludoteca-copia-${new Date().toISOString().slice(0, 10)}.txt`;
     const file = new File([data], name, { type: 'text/plain' });
     const done = () => { LS.set('ludo.lastBackup', Date.now()); if (state.layer === 'settings') $layers.innerHTML = settingsHTML(); if (!state.layer) render(); };
@@ -2027,9 +2166,18 @@
           uid: String(i.uid || uid()), kind: ['movie', 'comic'].includes(i.kind) ? i.kind : 'game', plat: i.plat, ref: i.ref, title: String(i.title), ...comicFields(i),
           year: i.year || null, front: safeImg(i.front), back: safeImg(i.back), media: safeImg(i.media), full: safeImg(i.full), spine: safeImg(i.spine), spinev: Number(i.spinev) || 0, face: !!i.face, wish: !!i.wish, genres: cleanG(i.genres) || undefined, imgv: Number(i.imgv) || 0, added: i.added || Date.now(), seen: !!i.seen, seenAt: Number(i.seenAt) || undefined, rating: clampR(i.rating), tmdbRef: typeof i.tmdbRef === 'string' && i.tmdbRef.startsWith('tmdb:') ? i.tmdbRef.slice(0, 40) : undefined,
           paid: isNum(i.paid) ? i.paid : undefined, value: isNum(i.value) ? i.value : undefined, valueAt: Number(i.valueAt) || undefined,
-          paidAt: typeof i.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) ? i.paidAt : undefined
+          paidAt: typeof i.paidAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) ? i.paidAt : undefined,
+          photo: typeof i.photo === 'string' && j.photos && typeof j.photos[i.photo] === 'string' ? i.photo.slice(0, 60) : undefined
         }));
         state.items = clean; saveItems();
+        if (j.photos) (async () => {
+          for (const it of clean.filter((x) => x.photo)) {
+            const d = j.photos[it.photo];
+            if (!/^data:image\/(jpeg|png|webp);base64,/.test(d)) { delete it.photo; continue; }
+            try { const b = await fetch(d).then((r) => r.blob()); await Photos.put(it.photo, b); applyPhoto(it, it.photo, b); } catch (e) { delete it.photo; }
+          }
+          saveItems(); render();
+        })();
         if (Array.isArray(j.friends)) {
           state.friends = j.friends.filter((f) => f && f.id && Array.isArray(f.items)).map((f) => ({
             id: String(f.id), name: String(f.name || 'Amigo').slice(0, 40), received: Number(f.received) || Date.now(),
@@ -2168,6 +2316,12 @@
       case 'addColl': state.add.coll = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'addCfmt': state.add.cfmt = id; state.add.q = (document.getElementById('q') || {}).value || ''; rerenderAdd(); break;
       case 'manual': openManual(); break;
+      case 'photo': photoForDetail(); break;
+      case 'photoDel': { const it = state.items.find((x) => x.uid === state.detail.item.uid); if (it) { dropPhoto(it); saveItems(); state.detail.item = it; closeSub(); rerenderDetail(); render(); toast('Vuelve la portada del catálogo'); } break; }
+      case 'cropSave': cropSave(); break;
+      case 'cropAgain': { const c = crop; if (!c) break; crop = null; URL.revokeObjectURL(c.url); closeSub(); pickPhoto(c.aspect, c.done); break; }
+      case 'mPhoto': pickPhoto(PLAT[manual.cfmt].w / PLAT[manual.cfmt].h, (blob) => { manual.blob = blob; if (manual.blobUrl) URL.revokeObjectURL(manual.blobUrl); manual.blobUrl = URL.createObjectURL(blob); manual.cover = manual.blobUrl; const b = document.getElementById('mCovers'); if (b) b.innerHTML = coversHTML(); }); break;
+      case 'setView': LS.set('ludo.view', id); document.querySelectorAll('[data-act="setView"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === id))); break;
       case 'mFmt': manual.cfmt = id; el.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); break;
       case 'mCoverFind': findManualCovers(); break;
       case 'mCoverPick': manual.cover = el.dataset.u || null; document.querySelectorAll('#mCovers .mc').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); break;
@@ -2275,6 +2429,7 @@
       if (r.ok) { const j = await r.json(); if (j.imgBase) IMG_BASE = new URL(j.imgBase, location.href).href; CATALOG_DATE = j.updated || ''; }
     } catch (e) { /* sin conexión: usamos lo guardado */ }
     render();
+    loadPhotos();
     receiveFromHash();
     setTimeout(upgradeItems, 800);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
