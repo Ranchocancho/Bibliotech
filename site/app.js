@@ -204,7 +204,7 @@
     } else if (state.mode === 'wish') {
       $dock.innerHTML = `<span>Lo que te gustaría tener</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la lista de deseos">${I.plus}Deseo</button>`;
     } else {
-      $dock.innerHTML = `<span>${items.length ? (viewMode() === 'feed' ? 'Desliza hacia abajo' : 'Desliza el dedo sobre la balda') : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
+      $dock.innerHTML = `<span>${items.length ? (viewMode() === 'feed' ? 'Toca una portada para abrirla' : 'Desliza el dedo sobre la balda') : 'Empieza tu colección'}</span><button class="btn btn-amber" data-act="add" aria-label="Añadir a la colección">${I.plus}Añadir</button>`;
     }
   }
 
@@ -432,16 +432,16 @@
   }
   // Vista «carrusel»: portadas grandes, una tras otra, deslizando hacia abajo
   const viewMode = () => (LS.get('ludo.view', 'shelf') === 'feed' ? 'feed' : 'shelf');
+  // Cuadrícula de portadas: 3 por fila a todo el ancho, alineadas por abajo como en una balda
   function feedHTML(list, readOnly) {
-    const W = Math.min(window.innerWidth * 0.74, 330);
-    return `<div class="feed">${list.map((it) => {
-      const p = PLAT[it.plat]; const k = W / p.w; const both = readOnly && !it.wish && !!ownMatch(it);
-      const meta = it.kind === 'comic' ? [it.series ? `${it.series}${it.num ? ` nº ${it.num}` : ''}` : '', it.authors].filter(Boolean).join(' · ')
-        : [p.short, it.year].filter(Boolean).join(' · ');
-      return `<div class="fcard"><button class="fc-hit${it.wish ? ' wish' : ''}${p.book ? ' book' : ''}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${esc(it.title)}" style="width:${Math.round(W)}px;height:${Math.round(p.h * k)}px">
+    const cols = LS.get('ludo.cols', 3) === 4 ? 4 : 3; const gap = cols === 4 ? 8 : 10;
+    const cw = Math.floor(((($content && $content.clientWidth) || window.innerWidth) - 28 - gap * (cols - 1)) / cols);
+    return `<div class="feed" style="grid-template-columns:repeat(${cols}, ${cw}px);gap:16px ${gap}px">${list.map((it) => {
+      const p = PLAT[it.plat]; const k = cw / p.w; const both = readOnly && !it.wish && !!ownMatch(it);
+      const label = esc(`${it.title}, ${p.short}${it.wish ? ', lo quieres' : ''}`);
+      return `<button class="fc-hit${it.wish ? ' wish' : ''}${p.book ? ' book' : ''}" data-act="open" data-uid="${esc(it.uid)}" aria-label="${label}" style="width:${cw}px;height:${Math.round(p.h * k)}px">
         ${both ? `<i class="both" aria-hidden="true">${I.check}</i>` : ''}
-        <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor};transform:scale(${k.toFixed(4)})"><div class="cover">${coverInner(it)}</div></div></button>
-        <div class="fc-meta"><b>${esc(it.title)}</b><span>${esc(meta)}${it.wish ? ' · lo quieres' : ''}</span></div></div>`;
+        <div class="case" style="width:${p.w}px;height:${p.h}px;background:${p.caseColor};transform:scale(${k.toFixed(4)})"><div class="cover">${coverInner(it)}</div></div></button>`;
     }).join('')}</div>`;
   }
   // Baldas vacías hasta el final de la pantalla: siempre parece una estantería
@@ -2112,8 +2112,10 @@
       <div class="layer-head"><h2>Ajustes</h2><button class="icon-btn" data-act="closeLayer" aria-label="Cerrar">${I.close}</button></div>
       <div class="body scroll">
         ${installPrompt ? `<div class="card"><h3>Instalar en el móvil</h3><p>Ludoteca se abrirá como una app más, a pantalla completa y sin conexión.</p><button class="btn btn-amber" data-act="install">${I.download}Instalar Ludoteca</button></div>` : ''}
-        <div class="card"><h3>Cómo se ve</h3><p>La estantería con lomos, o tus portadas en grande, una detrás de otra.</p>
-          <div class="pills" role="group" aria-label="Vista">${[['shelf', 'Estantería'], ['feed', 'Carrusel de portadas']].map(([v, n]) => `<button data-act="setView" data-id="${v}" aria-pressed="${viewMode() === v}">${n}</button>`).join('')}</div></div>
+        <div class="card"><h3>Cómo se ve</h3><p>La estantería con lomos, o todas tus portadas de frente, de tres en tres.</p>
+          <div class="pills" role="group" aria-label="Vista">${[['shelf', 'Estantería'], ['feed', 'Cuadrícula de portadas']].map(([v, n]) => `<button data-act="setView" data-id="${v}" aria-pressed="${viewMode() === v}">${n}</button>`).join('')}</div>
+          <p style="margin-top:12px">En la cuadrícula, portadas por fila:</p>
+          <div class="pills" role="group" aria-label="Portadas por fila">${[3, 4].map((n) => `<button data-act="setCols" data-id="${n}" aria-pressed="${(LS.get('ludo.cols', 3) === 4 ? 4 : 3) === n}">${n} por fila</button>`).join('')}</div></div>
         <div class="card"><h3>Tus estanterías</h3><p>Ponlas en el orden que prefieras y oculta las que no uses. Cada persona lo elige en su móvil.</p>
           <div class="order-list" id="orderList">${orderListHTML()}</div></div>
         <div class="card"><h3>Copia de seguridad</h3><p>Tu colección vive en este móvil. Al guardar se abre el menú de compartir: elige Google Drive, tu correo o un chat contigo mismo. Para recuperarla, elige ese archivo.</p>
@@ -2321,6 +2323,7 @@
       case 'cropSave': cropSave(); break;
       case 'cropAgain': { const c = crop; if (!c) break; crop = null; URL.revokeObjectURL(c.url); closeSub(); pickPhoto(c.aspect, c.done); break; }
       case 'mPhoto': pickPhoto(PLAT[manual.cfmt].w / PLAT[manual.cfmt].h, (blob) => { manual.blob = blob; if (manual.blobUrl) URL.revokeObjectURL(manual.blobUrl); manual.blobUrl = URL.createObjectURL(blob); manual.cover = manual.blobUrl; const b = document.getElementById('mCovers'); if (b) b.innerHTML = coversHTML(); }); break;
+      case 'setCols': LS.set('ludo.cols', Number(id)); document.querySelectorAll('[data-act="setCols"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === id))); break;
       case 'setView': LS.set('ludo.view', id); document.querySelectorAll('[data-act="setView"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === id))); break;
       case 'mFmt': manual.cfmt = id; el.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); break;
       case 'mCoverFind': findManualCovers(); break;

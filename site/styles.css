@@ -476,15 +476,11 @@ img { display: block; }
 .mc.shot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--amber); border: 1px dashed var(--amber); }
 .mc.shot svg { width: 24px; height: 24px; }
 
-/* v8 · carrusel de portadas */
-.feed { display: flex; flex-direction: column; align-items: center; gap: 34px; padding: 18px 0 120px; }
-.fcard { display: flex; flex-direction: column; align-items: center; gap: 12px; scroll-snap-align: center; }
-.fc-hit { position: relative; padding: 0; border: 0; background: none; cursor: pointer; }
-.fc-hit .case { position: absolute; left: 0; top: 0; transform-origin: 0 0; box-shadow: 0 18px 30px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .12); }
+/* v8.1 · cuadrícula de portadas */
+.feed { display: grid; justify-content: center; align-items: end; padding: 14px 14px 120px; }
+.fc-hit { position: relative; padding: 0; border: 0; background: none; cursor: pointer; transition: transform .12s; }
+.fc-hit:active { transform: scale(.96); }
+.fc-hit .case { position: absolute; left: 0; top: 0; transform-origin: 0 0; box-shadow: 0 8px 14px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .fc-hit.book .case { padding: 0; border-radius: 1px 3px 3px 1px; }
-.fc-hit.wish .case { opacity: .55; outline: 2px dashed rgba(242, 234, 217, .5); outline-offset: 4px; }
+.fc-hit.wish .case { opacity: .5; outline: 3px dashed rgba(242, 234, 217, .55); outline-offset: 4px; }
 .fc-hit .both { z-index: 2; }
-.fc-meta { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 80vw; text-align: center; }
-.fc-meta b { font: 700 17px/1.2 var(--serif); color: var(--ink, #f2ead9); }
-.fc-meta span { font-size: 13px; color: var(--soft); }
-#content:has(.feed) { scroll-snap-type: y proximity; }
