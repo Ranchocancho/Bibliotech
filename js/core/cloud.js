@@ -57,7 +57,7 @@ export async function initCloud() {
   const app = fb.initializeApp(firebaseConfig);
   auth = fb.getAuth(app);
   db = fb.getFirestore(app);
-  useCloud(push);
+  useCloud(queuePush);
   setImageBackend({ put: putImageCloud, get: getImageCloud });
   fb.onAuthStateChanged(auth, async u => {
     cloud.user = u;
@@ -232,6 +232,15 @@ function docsOf(s, dm) {
     (items || []).forEach((it, j) => { const { id: iid, ...ir } = it; out.set("items/" + iid, { ...ir, place: id, order: j }); });
   });
   return out;
+}
+
+// Los cambios seguidos del mismo momento (publicar una tirada y completarla) salen juntos: así una tirada nueva
+// de un jugador llega como una sola creación, que es lo que las reglas le permiten (no puede actualizarla después).
+let queued = null;
+function queuePush(state) {
+  if (queued) { queued = state; return; }
+  queued = state;
+  queueMicrotask(() => { const st = queued; queued = null; push(st); });
 }
 
 function push(state) {

@@ -37,10 +37,11 @@ export function masteryOf(c, w) {
 }
 
 /** Molestar: ventaja del atacante contra ese objetivo hasta el final de su siguiente turno. */
+export const vexOf = a => (a && a.conds || []).find(c => c.id === "molestar") || null;
 export function vexOn(s, a, b) {
-  const v = a && a.vex; if (!v || v.t !== b.id) return false;
+  const v = vexOf(a); if (!v || v.t !== b.id) return false;
   const st = (s.board && s.board.starts) || {};
-  return !((st[a.id] || 0) > v.seq && s.board.turn !== a.id);
+  return !((st[a.id] || 0) > v.vseq && s.board.turn !== a.id);
 }
 
 /* ---------- Lo automático (lo llama quien puede escribir: el máster) ---------- */
@@ -57,7 +58,9 @@ export function onHit(st, r) {
 export function onDamage(st, attackRoll, amt) {
   if (!attackRoll || !attackRoll.mas || attackRoll.mas.n !== "Molestar" || !(amt > 0)) return;
   const a = st.tokens.find(x => x.id === attackRoll.tok); if (!a) return;
-  a.vex = { t: attackRoll.target, seq: st.board ? st.board.seq || 0 : 0 };
+  // Va en «conds» del atacante: es lo único (con posición e iniciativa) que un jugador puede cambiar en su ficha de la mesa
+  a.conds = (a.conds || []).filter(c => c.id !== "molestar");
+  a.conds.push({ id: "molestar", t: attackRoll.target, vseq: st.board ? st.board.seq || 0 : 0, src: a.id, note: "Molestar" });
 }
 
 /* ---------- A elección ---------- */
@@ -71,7 +74,7 @@ export function masteryChoice(s, r) {
   if (n === "Derribar") return { n, label: `Derribar (salvación de CON CD ${r.mas.dc})` };
   if (n === "Empujar") return { n, label: "Empujar 3 m" };
   if (n === "Ralentizar") { const d = dmgRowOf(s, r); return d && d.applied > 0 ? { n, label: "Ralentizar (−3 m)" } : null; }
-  if (n === "Hender") return r.mas.melee && !r.cleaveOf && !cleavedThisTurn(s, r.tok) ? { n, label: "Hender: atacar a otra criatura" } : null;
+  if (n === "Hender") return r.mas.melee && !r.cleaveOf && !cleavedThisTurn(s, r.tok) && !(s.rolls || []).some(x => x.cleaveOf === r.id && x.status !== "void") ? { n, label: "Hender: atacar a otra criatura" } : null;
   return null;
 }
 const cleavedThisTurn = (s, tok) => (s.rolls || []).some(x => x.tok === tok && x.cleaveOf && x.status !== "void" && s.board && x.seq === s.board.seq);
@@ -85,7 +88,7 @@ export async function useMastery(rollId, extra = {}) {
   if (ch.n === "Hender") return cleave(r, extra.target);
   if (ch.n === "Rozar") {
     const { publish } = await import("./dados.js"), t = s.tokens.find(x => x.id === r.target);
-    store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) x.masUsed = true; });
+    if (isDM(s)) store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) x.masUsed = true; });
     return publish({ kind: "damage", label: `Rozar a ${t ? (charOf(s, t) || t).name : ""}${r.dtype ? " · " + r.dtype : ""}`, expr: String(r.mas.m), by: r.tok, target: r.target, link: r.id, dtype: r.dtype });
   }
   if (isDM(s)) return applyMastery(rollId);
@@ -146,7 +149,7 @@ function cleave(r, targetId) {
   if (!targetId) return;
   const m = r.mas.m, expr = m > 0 ? w.expr.replace(new RegExp(`\\+${m}$`), "") : w.expr;
   const out = attack(a.id, targetId, { ...w, expr, name: w.name + " (Hender)" }, null, null, { free: true, cleaveOf: r.id });
-  if (out) store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) x.masUsed = true; });
+  if (out && isDM(s)) store.commit("roll", st => { const x = st.rolls.find(y => y.id === r.id); if (x) x.masUsed = true; });
 }
 /** Criaturas válidas para Hender: a 1,5 m o menos de la primera y al alcance del atacante. */
 export function cleaveTargets(s, r) {

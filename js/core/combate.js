@@ -79,7 +79,7 @@ export function attack(attackerId, targetId, weapon, force = null, use = "act", 
     mas: weapon.mas && !opt.cleaveOf ? weapon.mas : null, wname: weapon.name, cleaveOf: opt.cleaveOf || null
   });
   // Lo que se gasta al atacar: Debilitar (desventaja en su próximo ataque) y Molestar (ventaja en el siguiente contra ese objetivo)
-  if (r && (hasCond(a, "debilitado") || (a.vex && a.vex.t === t.id))) store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); if (!k) return; k.conds = (k.conds || []).filter(c => c.id !== "debilitado"); if (k.vex && k.vex.t === t.id) delete k.vex; });
+  if (r && (a.conds || []).some(c => c.id === "debilitado" || (c.id === "molestar" && c.t === t.id))) store.commit("token", st => { const k = st.tokens.find(x => x.id === a.id); if (k) k.conds = (k.conds || []).filter(c => !(c.id === "debilitado" || (c.id === "molestar" && c.t === t.id))); });
   if (r && r.mas && r.status === "ok" && isDM(store.get())) store.commit("roll", st => onHit(st, st.rolls.find(x => x.id === r.id)));
   // Efectos del SRD al acertar (criaturas): salvación del objetivo (p. ej. la parálisis del gul) o un estado directo (agarre, derribo)
   if (r && (weapon.rider || weapon.cond) && (r.result === "hit" || r.result === "crit") && r.status === "ok") onHitEffects(a, t, weapon);

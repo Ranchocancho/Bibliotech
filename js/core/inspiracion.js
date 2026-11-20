@@ -1,7 +1,7 @@
 // Inspiración heroica (SRD 5.2.1, «Cómo jugar» y glosario): el máster la concede (los humanos la obtienen al
 // terminar un descanso largo). Quien la tiene puede gastarla para volver a tirar un dado justo después de lanzarlo
 // y debe usar el nuevo resultado. Con ventaja o desventaja solo se repite uno de los dos d20.
-import { store } from "./store.js";
+import { store, uid } from "./store.js";
 import { isDM, currentUser } from "./session.js";
 import { charOf } from "./mesa.js";
 import { rnd } from "./dados.js";
@@ -34,8 +34,12 @@ export function useInspiration(rollId) {
   if (!canInspire(s, r0)) return;
   const cId = rollerChar(s, r0).id;
   let msg = "";
+  // Las reglas de la nube no dejan a un jugador cambiar una tirada publicada (solo crearla o borrarla):
+  // se publica la tirada repetida con un id nuevo y se quita la anterior.
   store.commit("roll", st => {
-    const r = st.rolls.find(x => x.id === rollId); if (!r) return;
+    const i0 = st.rolls.findIndex(x => x.id === rollId); if (i0 < 0) return;
+    const r = JSON.parse(JSON.stringify(st.rolls[i0])); r.id = uid("roll"); r.replaces = rollId;
+    st.rolls.splice(i0, 1, r);
     const dice = r.dice || [], d20 = dice.map((d, i) => [d, i]).filter(([d]) => d.d === 20);
     let i, old, nv;
     if (d20.length && r.kind !== "damage") {

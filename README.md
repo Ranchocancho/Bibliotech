@@ -565,3 +565,9 @@ Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) sa
   - Derribar (salvación de CON), Empujar 3 m en línea recta, Ralentizar (−3 m, sin acumular), Hender (segundo ataque a 1,5 m, sin modificador al daño, una vez por turno) y Rozar (daño igual al modificador al fallar): botón en la tirada. El máster lo aplica al momento; si lo pide un jugador, al máster le llega la petición para aceptarla.
   - Mellar: se recuerda en la tirada.
 - Los estados con duración «hasta el principio de tu siguiente turno» se quitan solos al empezar ese turno.
+
+## Hito 37 · Todo dentro de las reglas de Firestore actuales
+- Un jugador no puede cambiar una tirada ya publicada (solo crearla o borrarla): «✨ Repetir» publica la tirada repetida y quita la anterior; las maestrías del jugador no marcan su tirada (se deduce de lo que ya hay).
+- Molestar se guarda como estado en la ficha de la mesa del atacante (las reglas solo dejan al jugador cambiar posición, iniciativa, estados, efectos y acciones).
+- En la nube, los cambios seguidos del mismo instante salen en un solo envío: una tirada que se publica y se completa a la vez (por ejemplo, un conjuro con salvación lanzado por un jugador) llega como una sola creación.
+- No hay que tocar firestore.rules.

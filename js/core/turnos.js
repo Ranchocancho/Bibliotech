@@ -65,8 +65,7 @@ function advanceTo(s, t) {
   // Se quitan los estados que caducan al empezar este turno (Esquivar, Debilitar, Ralentizar…) y Molestar ya pasado
   const st = s.board.starts;
   s.tokens.forEach(k => {
-    if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq));
-    if (k.vex && (st[k.id] || 0) > k.vex.seq && t.id !== k.id) delete k.vex;
+    if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq) && !(c.id === "molestar" && (st[k.id] || 0) > c.vseq && t.id !== k.id));
   });
   onTurnStart(s, t); // criaturas: recarga (d6) de lo gastado y acciones legendarias de nuevo
 }
@@ -179,7 +178,7 @@ export function modifiers(s, a, b, rng) {
   if (has(a, "derribado")) dis.push("estás derribado");
   if (has(a, "asustado")) dis.push("estás asustado");
   if (has(a, "debilitado")) dis.push("Debilitar (maestría): su próximo ataque");
-  if (a.vex && a.vex.t === b.id && vexOn(s, a, b)) adv.push("Molestar (maestría)");
+  if (vexOn(s, a, b)) adv.push("Molestar (maestría)");
   for (const [id, why] of [["cegado", "el objetivo está cegado"], ["apresado", "el objetivo está apresado"], ["aturdido", "el objetivo está aturdido"], ["paralizado", "el objetivo está paralizado"], ["petrificado", "el objetivo está petrificado"], ["inconsciente", "el objetivo está inconsciente"]]) if (has(b, id)) adv.push(why);
   if (has(b, "derribado")) (close ? adv : dis).push(close ? "objetivo derribado a 1,5 m" : "objetivo derribado a distancia");
   if (has(b, "invisible")) dis.push("el objetivo es invisible");

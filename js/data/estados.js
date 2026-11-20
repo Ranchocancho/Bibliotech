@@ -23,6 +23,7 @@ export const ESTADOS = [
   { id: "perdicion", n: "Perdición", c: "#5a2a6a", t: "Perdición: resta 1d4 a sus tiradas de ataque y de salvación mientras dure." },
   { id: "debilitado", n: "Debilitado (maestría)", c: "#b08a6a", t: "Debilitar: desventaja en su próxima tirada de ataque antes del principio del siguiente turno de quien le acertó." },
   { id: "ralentizado", n: "Ralentizado (maestría)", c: "#6a8ab0", t: "Ralentizar: su velocidad baja 3 m hasta el principio del siguiente turno de quien le acertó (no se acumula)." },
+  { id: "molestar", n: "Molestar (maestría)", c: "#c9a14a", t: "Molestar: ventaja en su siguiente tirada de ataque contra la criatura a la que dañó, antes del final de su siguiente turno." },
   { id: "muerto", n: "Muerto", c: "#111111", t: "Ha fallado tres salvaciones contra muerte (o recibió daño masivo). Solo la magia puede devolverlo." }
 ];
 export const estado = id => ESTADOS.find(e => e.id === id);
