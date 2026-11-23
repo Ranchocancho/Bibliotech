@@ -168,7 +168,7 @@ export function numberDupes(tokens) {
 /** Copia una escena preparada a la mesa en directo, colocando al grupo en su punto de inicio. */
 export function sceneToBoard(scene, characters, keepPCs) {
   const floors = cloneFloors(scene, { newIds: true });
-  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", turn: null, round: 0, ...(floors ? { floors, floor: scene.floor || 0 } : {}) };
+  const board = { scene: scene.id, name: scene.name, cols: scene.cols, rows: scene.rows, terrain: { ...scene.terrain }, ...(scene.elev ? { elev: { ...scene.elev } } : {}), props: scene.props.map(p => ({ ...p })), ambient: scene.ambient || "interior", sound: scene.sound || "", region: scene.region || "", lavaDmg: scene.lavaDmg || "", fallH: scene.fallH || 3, turn: null, round: 0, ...(scene.light ? { light: scene.light } : {}), ...(scene.fog === false ? { fog: false } : {}), ...(floors ? { floors, floor: scene.floor || 0 } : {}) };
   const foes = numberDupes(scene.tokens.map(t => ({ ...t, id: id("t"), init: null })));
   const spots = ring(scene.start || { c: 1, r: 1 }, scene);
   const pcs = characters.map((ch, i) => {
@@ -176,6 +176,9 @@ export function sceneToBoard(scene, characters, keepPCs) {
     const at = spots[i] || spots[spots.length - 1] || { c: 0, r: 0 };
     return { id: old ? old.id : id("t"), kind: "pc", char: ch.id, owner: ch.owner || null, name: ch.name, c: at.c, r: at.r, size: 1, init: null, conds: old && old.conds ? old.conds : [] };
   });
+  // Despliegue: el grupo se coloca por turnos dentro de la zona de inicio (core/despliegue.js)
+  const st = scene.start || { c: 1, r: 1 };
+  if (pcs.length) board.deploy = { id: "dp" + Date.now().toString(36), c: st.c, r: st.r, rad: +scene.deployRad || 2, on: true };
   return { board, tokens: [...pcs, ...foes] };
 }
 function ring(start, scene) {

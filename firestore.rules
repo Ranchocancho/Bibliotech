@@ -1,0 +1,161 @@
+rules_version = '2';
+
+// Reglas de seguridad de La Mesa.
+// Cada documento de "campaigns" es un MUNDO.
+// - Solo los miembros de un mundo ven sus datos.
+// - Lo modifican su dueño (el administrador, quien lo creó) y los másteres que él nombre.
+// - Solo el dueño nombra o quita másteres.
+// - Los jugadores solo reciben los lugares visibles y el contenido revelado.
+// - Las notas secretas solo las leen el dueño y los másteres.
+// - Cualquiera con el enlace y una cuenta de Google puede unirse como jugador.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function world(c) { return get(/databases/$(database)/documents/campaigns/$(c)).data; }
+    function isMember(c) { return signedIn() && request.auth.uid in world(c).memberIds; }
+    function editorOf(w) { return signedIn() && (w.owner == request.auth.uid || request.auth.uid in w.get('dms', [])); }
+    function isEditor(c) { return editorOf(world(c)); }
+
+    // ---- Fichas: lo que un jugador puede cambiar en la suya ----
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function playKeys() { return ['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order', 'ft']; }
+    function slotMax(d, l) { return d.get('spells', {}).get('slots', {}).get(l, {}).get('max', 0); }
+    function slotMaxSame(a, b) {
+      return slotMax(a, '1') == slotMax(b, '1') && slotMax(a, '2') == slotMax(b, '2') && slotMax(a, '3') == slotMax(b, '3')
+        && slotMax(a, '4') == slotMax(b, '4') && slotMax(a, '5') == slotMax(b, '5') && slotMax(a, '6') == slotMax(b, '6')
+        && slotMax(a, '7') == slotMax(b, '7') && slotMax(a, '8') == slotMax(b, '8') && slotMax(a, '9') == slotMax(b, '9');
+    }
+    function spellListSame(a, b) { return a.get('spells', {}).get('list', []) == b.get('spells', {}).get('list', []); }
+    function inspirationOk(a, b) {
+      return b.get('inspiration', false) == a.get('inspiration', false) || b.get('inspiration', false) == false
+        || a.get('species', '').matches('^Humano.*');
+    }
+    function playerPlays() {
+      let a = resource.data;
+      let b = request.resource.data;
+      return changed().hasOnly(playKeys())
+        && b.hp.max == a.hp.max
+        && slotMaxSame(a, b) && spellListSame(a, b)
+        && inspirationOk(a, b);
+    }
+    function abSum(d) { return d.abilities.fue + d.abilities.des + d.abilities.con + d.abilities.int + d.abilities.sab + d.abilities.car; }
+    function playerLevelsUp() {
+      let a = resource.data;
+      let b = request.resource.data;
+      return b.level == a.level + 1 && a.get('lvlGrant', 0) >= b.level
+        && changed().hasOnly(['hp', 'hdUsed', 'death', 'inspiration', 'spells', 'journal', 'proposals', 'lvlDraft', 'order',
+                              'level', 'abilities', 'subclass', 'features', 'levelLog', 'lvlGrant', 'log'])
+        && b.hp.max > a.hp.max && b.hp.max - a.hp.max <= 60
+        && abSum(b) >= abSum(a) && abSum(b) - abSum(a) <= 2
+        && inspirationOk(a, b);
+    }
+
+    // Un jugador se añade a sí mismo, sin tocar nada más.
+    function joiningSelf() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return after.diff(before).affectedKeys().hasOnly(['memberIds', 'members'])
+        && after.memberIds.toSet().difference(before.memberIds.toSet()) == [request.auth.uid].toSet()
+        && before.memberIds.toSet().difference(after.memberIds.toSet()).size() == 0
+        && after.members.diff(before.members).affectedKeys().hasOnly([request.auth.uid])
+        && after.members[request.auth.uid].role == 'player';
+    }
+
+    match /campaigns/{c} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid];
+      allow update: if signedIn() && (
+        (editorOf(resource.data)
+          && request.resource.data.owner == resource.data.owner
+          && (resource.data.owner == request.auth.uid
+              || request.resource.data.get('dms', []) == resource.data.get('dms', [])))
+        || joiningSelf());
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      match /places/{p} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.visible == true);
+        allow write: if isEditor(c);
+      }
+      match /items/{i} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.revealed == true);
+        allow write: if isEditor(c);
+      }
+      // Fichas: todo el grupo las ve. El administrador y los másteres las editan enteras.
+      // El jugador, en la suya, solo puede:
+      //  - lo que se gasta jugando en la Partida: PG (no los máximos), PG temporales, dados de golpe, salvaciones
+      //    contra muerte, espacios de conjuro gastados (no los máximos ni la lista) e inspiración (gastarla; los
+      //    humanos la recuperan en el descanso largo);
+      //  - su cuaderno, sus propuestas de cambio al máster, la subida de nivel guardada a medias
+      //    y lo que elige hacer en el tiempo libre (ft);
+      //  - subir de nivel cuando el máster lo ha concedido (un nivel cada vez, como mucho hasta el concedido).
+      // Todo lo demás (monedas, equipo, rasgos, habilidades…) lo propone y lo aplica el máster.
+      match /characters/{ch} {
+        allow read: if isMember(c);
+        allow create: if isEditor(c) || (isMember(c) && request.resource.data.owner == request.auth.uid);
+        allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
+          && request.resource.data.owner == request.auth.uid
+          && (playerPlays() || playerLevelsUp()));
+        allow delete: if isEditor(c);
+      }
+      // Mesa táctica: escenas preparadas (solo máster), la mesa en directo y las fichas sobre ella.
+      match /scenes/{sc} {
+        allow read, write: if isEditor(c);
+      }
+      match /board/{b} {
+        allow read: if isMember(c);
+        allow write: if isEditor(c);
+        // Cualquier jugador puede terminar el turno (pasar al siguiente), sin tocar nada más de la mesa
+        allow update: if isMember(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['turn', 'round', 'seq', 'starts', 'from']);
+      }
+      match /tokens/{t} {
+        allow read: if isMember(c);
+        allow create, delete: if isEditor(c);
+        allow update: if isEditor(c) || (isMember(c) && resource.data.owner == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'r', 'init', 'conds', 'fx', 'eco', 'light']));
+      }
+      // Crónica: todos la leen; cada uno escribe y corrige sus notas; el máster puede corregir todas.
+      match /chronicle/{e} {
+        allow read: if isMember(c);
+        allow create: if isMember(c) && request.resource.data.by == request.auth.uid;
+        allow update, delete: if isEditor(c) || (isMember(c) && resource.data.by == request.auth.uid);
+      }
+      // Tiradas: todos las ven; cada uno publica las suyas; el máster las confirma, cambia o anula.
+      match /rolls/{r} {
+        allow read: if isMember(c);
+        allow create: if isMember(c) && request.resource.data.who == request.auth.uid;
+        allow update: if isEditor(c);
+        allow delete: if isEditor(c) || (isMember(c) && resource.data.who == request.auth.uid);
+      }
+      // Lore: el máster lo crea todo; los jugadores solo leen lo que se les ha revelado.
+      match /lore/{l} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.revealed == true);
+        allow write: if isEditor(c);
+      }
+      match /secrets/{s} {
+        allow read, write: if isEditor(c);
+      }
+      // Imágenes: los jugadores también suben (por ejemplo, el retrato de su personaje).
+      match /images/{k} {
+        allow read: if isMember(c);
+        allow write: if isMember(c);
+        match /c/{n} {
+          allow read: if isMember(c);
+          allow write: if isMember(c);
+        }
+      }
+      // Susurros: lo que el máster cuenta a un solo jugador (tiempo libre, saberes propios). Solo lo leen él y los másteres.
+      match /whispers/{w} {
+        allow read: if isEditor(c) || (isMember(c) && resource.data.to == request.auth.uid);
+        allow write: if isEditor(c);
+      }
+      match /presence/{u} {
+        allow read: if isMember(c);
+        allow write: if isMember(c) && u == request.auth.uid;
+      }
+    }
+  }
+}

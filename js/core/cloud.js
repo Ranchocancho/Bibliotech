@@ -15,6 +15,7 @@
 //   campaigns/{cid}/rolls/{id}     tiradas de dados (cada uno las suyas; el máster las confirma)
 //   campaigns/{cid}/images/{key}   imágenes troceadas en documentos de menos de 1 MB
 //   campaigns/{cid}/presence/{uid} última señal de cada participante
+//   campaigns/{cid}/whispers/{id}  lo que el máster cuenta a un solo jugador (lo leen él y los másteres)
 import { firebaseConfig } from "./firebase-config.js";
 import { store, useCloud } from "./store.js";
 import { session } from "./session.js";
@@ -28,7 +29,7 @@ const COLORS = ["#79a85a", "#c97a3d", "#7d8fe0", "#e0d6b0", "#b4583a", "#8a9a4a"
 
 let fb, auth, db;
 const unsubs = [];
-const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), board: null, got: new Set() };
+const cache = { campaign: null, places: new Map(), items: new Map(), secrets: new Map(), characters: new Map(), scenes: new Map(), tokens: new Map(), chronicle: new Map(), rolls: new Map(), lore: new Map(), whispers: new Map(), board: null, got: new Set() };
 let last = new Map();       // lo último sincronizado, para enviar solo lo que cambia
 let beatTimer = null;
 
@@ -139,7 +140,7 @@ export async function createCampaign(name, withExample) {
 function listen(cid) {
   const dm = cloud.isEditor;
   const col = n => fb.collection(db, "campaigns", cid, n);
-  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore"];
+  const need = dm ? ["campaign", "places", "items", "secrets", "characters", "board", "tokens", "scenes", "chronicle", "rolls", "lore", "whispers"] : ["campaign", "places", "items", "characters", "board", "tokens", "chronicle", "rolls", "lore", "whispers"];
   cache.got.clear();
   const done = k => { cache.got.add(k); if (need.every(n => cache.got.has(n))) refresh(); };
   const fail = e => { console.error(e); cloud.error = "Se perdió la conexión con la campaña. Recarga la página."; ping(); };
@@ -152,6 +153,8 @@ function listen(cid) {
   unsubs.push(fb.onSnapshot(col("rolls"), s => { cache.rolls = new Map(s.docs.map(d => [d.id, d.data()])); done("rolls"); }, fail));
   unsubs.push(fb.onSnapshot(col("chronicle"), s => { cache.chronicle = new Map(s.docs.map(d => [d.id, d.data()])); done("chronicle"); }, fail));
   unsubs.push(fb.onSnapshot(col("tokens"), s => { cache.tokens = new Map(s.docs.map(d => [d.id, d.data()])); done("tokens"); }, fail));
+  // Susurros: el máster los recibe todos; cada jugador, solo los suyos (las reglas no le dejan leer otros)
+  unsubs.push(fb.onSnapshot(dm ? col("whispers") : fb.query(col("whispers"), fb.where("to", "==", cloud.user.uid)), s => { cache.whispers = new Map(s.docs.map(d => [d.id, d.data()])); done("whispers"); }, fail));
   if (dm) unsubs.push(fb.onSnapshot(col("scenes"), s => { cache.scenes = new Map(s.docs.map(d => [d.id, d.data()])); done("scenes"); }, fail));
   if (dm) unsubs.push(fb.onSnapshot(col("secrets"), s => { cache.secrets = new Map(s.docs.map(d => [d.id, d.data()])); done("secrets"); }, fail));
   unsubs.push(fb.onSnapshot(col("presence"), s => { const m = {}; s.docs.forEach(d => (m[d.id] = d.data().t)); presence.feed(m); }, () => {}));
@@ -162,7 +165,7 @@ function listen(cid) {
 function stopCampaign() {
   unsubs.splice(0).forEach(u => u());
   clearInterval(beatTimer); beatTimer = null;
-  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.board = null; cache.got.clear();
+  cache.campaign = null; cache.places.clear(); cache.items.clear(); cache.secrets.clear(); cache.characters.clear(); cache.scenes.clear(); cache.tokens.clear(); cache.chronicle.clear(); cache.rolls.clear(); cache.lore.clear(); cache.whispers.clear(); cache.board = null; cache.got.clear();
   last = new Map(); cloud.cid = null; cloud.isEditor = false;
 }
 
@@ -191,6 +194,9 @@ function refresh() {
     world: { map: c.map ? c.map.key : null, mapW: c.map ? c.map.w : null, mapH: c.map ? c.map.h : null, places,
       regions: (c.regions || []).map(r => ({ ...r, secret: (cache.secrets.get(r.id) || {}).secret || "" })) },
     sessions: c.sessions || [], presentation: c.presentation || null, clock: c.clock || null, backdrop: c.backdrop || null, bestiary: c.bestiary || {},
+    loot: c.loot || null, shopAdj: +c.shopAdj || 0, freeLog: c.freeLog || [], showOdds: c.showOdds !== false,
+    freeTime: c.freeTime ? { ...c.freeTime, spots: (c.freeTime.spots || []).map(x => ({ ...x, secret: (cache.secrets.get("ft-" + x.id) || {}).secret || "" })) } : null,
+    whispers: [...cache.whispers.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
     lore: [...cache.lore.entries()].map(([id, x]) => ({ id, ...x, secret: (cache.secrets.get(id) || {}).secret || "" })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.at || 0) - (b.at || 0)),
     scenes: [...cache.scenes.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => (a.order || 0) - (b.order || 0)).map(x => strip(x, "order")),
     rolls: [...cache.rolls.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => a.at - b.at),
@@ -213,6 +219,8 @@ function docsOf(s, dm) {
     name: s.campaign.name, rules: s.campaign.rules,
     dms: s.dms || [], live: s.live || null,
     sessions: s.sessions, presentation: s.presentation || null, clock: s.clock || null, backdrop: s.backdrop || null, bestiary: s.bestiary || {},
+    loot: s.loot || null, shopAdj: +s.shopAdj || 0, freeLog: s.freeLog || [], showOdds: s.showOdds !== false,
+    freeTime: s.freeTime ? { ...s.freeTime, spots: (s.freeTime.spots || []).map(({ secret, ...x }) => x) } : null,
     map: s.world.map ? { key: s.world.map, w: s.world.mapW, h: s.world.mapH } : null,
     regions: (s.world.regions || []).map(({ secret, ...r }) => r),
     members
@@ -223,6 +231,8 @@ function docsOf(s, dm) {
   (s.chronicle || []).forEach(e => { const { id, ...rest } = e; out.set("chronicle/" + id, rest); });
   (s.rolls || []).forEach(e => { const { id, ...rest } = e; out.set("rolls/" + id, rest); });
   (s.tokens || []).forEach(t => { const { id, ...rest } = t; out.set("tokens/" + id, rest); });
+  (s.whispers || []).forEach(w => { const { id, ...rest } = w; out.set("whispers/" + id, rest); });
+  if (dm && s.freeTime) (s.freeTime.spots || []).forEach(x => out.set("secrets/ft-" + x.id, { secret: x.secret || "" }));
   if (dm) (s.world.regions || []).forEach(r => out.set("secrets/" + r.id, { secret: r.secret || "" }));
   (s.lore || []).forEach(e => { const { id, secret, ...rest } = e; out.set("lore/" + id, rest); if (dm) out.set("secrets/" + id, { secret: secret || "" }); });
   s.world.places.forEach((p, i) => {
@@ -252,13 +262,25 @@ function push(state) {
   const allowed = (k, v) => cloud.isEditor || ((k.startsWith("characters/") || k.startsWith("tokens/")) && v && v.owner === me) || (k.startsWith("chronicle/") && v && v.by === me) || (k.startsWith("rolls/") && v && v.who === me) || (k === "board/live" && lastTurn !== JSON.stringify([v.turn, v.round, v.seq]));
   const ref = k => k === "C" ? fb.doc(db, "campaigns", cloud.cid) : fb.doc(db, "campaigns", cloud.cid, ...k.split("/"));
   // Firestore admite 500 escrituras por lote: los cambios grandes (restaurar una copia) se parten en varios
-  const ops = [];
+  const ops = [], keys = [];
   for (const [k, v] of all) {
     const j = JSON.stringify(v);
-    if (last.get(k) !== j && allowed(k, v)) ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {}));
+    if (last.get(k) !== j && allowed(k, v)) { ops.push(b => b.set(ref(k), clean(v), k === "C" ? { merge: true } : {})); keys.push(k); }
   }
-  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) ops.push(b => b.delete(ref(k)));
+  for (const [k, j] of last) if (!all.has(k) && allowed(k, JSON.parse(j))) { ops.push(b => b.delete(ref(k))); keys.push(k); }
   last = new Map([...all].map(([k, v]) => [k, JSON.stringify(v)]));
+  // Un jugador escribe pocos documentos: uno a uno, para que si el servidor rechaza un cambio en su ficha
+  // (las reglas solo le dejan lo de la Partida, sus notas, sus propuestas y la subida de nivel) no arrastre el resto.
+  if (!cloud.isEditor) {
+    ops.forEach((op, i) => { const b = fb.writeBatch(db); op(b); b.commit().catch(e => {
+      console.error(e);
+      cloud.error = e.code === "permission-denied" && keys[i].startsWith("characters/")
+        ? "El servidor no ha aceptado ese cambio en tu ficha: pídeselo al máster con «✎ Proponer un cambio»."
+        : "No se pudo guardar el último cambio. Comprueba la conexión.";
+      ping();
+    }); });
+    return;
+  }
   for (let i = 0; i < ops.length; i += 450) {
     const batch = fb.writeBatch(db);
     ops.slice(i, i + 450).forEach(op => op(batch));

@@ -571,3 +571,153 @@ Arreglos: los humanoides «Medianos o Pequeños» del SRD (mago, veterano…) sa
 - Molestar se guarda como estado en la ficha de la mesa del atacante (las reglas solo dejan al jugador cambiar posición, iniciativa, estados, efectos y acciones).
 - En la nube, los cambios seguidos del mismo instante salen en un solo envío: una tirada que se publica y se completa a la vez (por ejemplo, un conjuro con salvación lanzado por un jugador) llega como una sola creación.
 - No hay que tocar firestore.rules.
+
+## Hito 38 · Editor de mapas más limpio
+- La barra del editor de mapas cabe en una sola línea (en el móvil se desliza de lado); Mover y Enemigo ya no abren una segunda barra con la ayuda (va en el título del botón).
+- El mapa se encaja justo debajo de la barra, sin hueco arriba.
+- En el móvil la cabecera ocupa dos líneas: nombre y usuario arriba, secciones deslizables debajo.
+
+## Hito 39 · Paquetes de región y peligros del terreno
+
+- **9 paquetes de región** (Enano, Élfico, Orco, Ciudad, Cementerio, Montaña, Pantano, Volcán, Costa): 49 suelos y 98 objetos en total, con pestaña propia en Pincel y Objetos. Cada pieza indica cobertura, luz, caída o fuego.
+- **Región de la escena** en ⚙ Mapa (o al crear la escena). Se hereda del Lore: cada región del mundo tiene su «Paquete de mapas» y la escena lo sugiere según su lugar. Fija luz y sonido.
+- **Generadores por región**: «Generar <región>» crea un mapa con sus piezas y deja una nota oculta para el máster.
+- **Peligros que se aplican solos** al entrar en la casilla (SRD 5.2.1):
+  - Abismo y pozos: caída de 1d6 por cada 3 m (máx. 20d6) y derribado.
+  - Hielo: salvación de Destreza CD 10 o derribado.
+  - Brasas y hogueras: estado Ardiendo (1d4 de fuego al empezar el turno; «Apagarse» gasta la acción y deja derribado).
+  - Lava: el daño lo fija el máster (**regla de campaña**, el SRD no la trae).
+  - Un puente anula el peligro.
+- **Las 8 trampas del SRD** (aguja, dardos, estatua, pozo con pinchos, pozo, red, roca rodante, techo que se derrumba) con CD y daño según el nivel del grupo.
+- «Agotamiento» pasa a llamarse **Cansancio** (texto 2024); resta 1,5 m de velocidad por nivel.
+- 3D: piezas nuevas modeladas; el agua, la lava y el abismo vuelven a verse (el marco de la mesa los tapaba).
+
+## Hito 40 · Reglas y monstruos más fáciles de consultar
+
+- **Libro con índice desplegable**: cada capítulo tiene sus subsecciones (Cómo jugar › Combate › Cobertura, las 12 clases, Equipo › Armaduras…). Al tocar una se salta a esa página y se resalta el título. Las páginas del índice están comprobadas contra el texto del SRD.
+- **Migas de pan** encima de la página («Cómo jugar › Combate › Cobertura · p. 16») y resultados de búsqueda con su capítulo.
+- **Accesos rápidos**: Estados, Acciones, Cobertura, Descansos, Caídas, Salvación contra muerte, Viajes y Encuentros.
+- **Pestaña Glosario**: las definiciones del SRD como diccionario A–Z, filtrables por Estados, Acciones, Áreas, Peligros y Actitudes. Los «Consulta también» son enlaces, y cada entrada abre su página del libro.
+- **Monstruos por categorías**: rangos de VD, tipo, tamaño, movimiento (vuela, nada, trepa, excava), rasgos (conjuros, legendaria, reacciones, anfibia, resistencia mágica), defensas y origen (Monstruos o Animales). Cada filtro muestra cuántas quedan, y se puede ordenar por nombre o por VD. Las filas llevan iconos.
+- **Para tu grupo** (máster): la dificultad de una criatura con el presupuesto de PX del SRD y cuántas hacen falta para subir de categoría.
+- Perfiles más limpios: la cabecera (salvaciones, habilidades, defensas, sentidos, idiomas, VD) se separa bien aunque el PDF la junte en una línea.
+- **Móvil**: lista o página a pantalla completa con botón «← Lista» / «☰ Índice»; los filtros de tipo ya se ven (antes quedaban ocultos).
+
+## Hito 41 · Defensas de las criaturas del SRD, automáticas
+
+Todo se lee del perfil de cada criatura (SRD 5.2.1):
+- **Resistencias, vulnerabilidades e inmunidades al daño**: el botón «✓ Aplicar» ya trae la defensa (½, ×2 o 0) y el resultado. Se puede aplicar el daño completo con otro botón. En conjuros y trampas con salvación, la defensa se aplica después de la mitad por salvación, con un chip por objetivo para quitarla.
+- **Inmunidad a estados**: la criatura no recibe los estados a los que es inmune (zombi y envenenado, acechador y derribado…), ni a mano ni desde ataques o conjuros.
+- **Regeneración** al empezar su turno (troll 15, oni 10…). El ácido o el fuego la cortan el turno siguiente. Un troll a 0 PG sigue en la iniciativa y solo muere si empieza su turno sin regenerarse; el oni no se regenera a 0.
+- **Resistencia legendaria**: en la tabla del conjuro, botón «👑 Superarla (n)» en la salvación fallada, con sus usos por día («↺ Recuperar usos» los devuelve).
+- **Resistencia mágica**: ventaja en las salvaciones contra conjuros, puesta por defecto y que el máster puede quitar o volver a poner con un toque.
+- **Tácticas de manada** y los demás rasgos situacionales quedan a criterio del máster (se leen en el perfil).
+- En el panel PNJ se ven las defensas de cada criatura.
+- El inicio del turno de una criatura (recarga, Regeneración, legendarias) lo aplica siempre el máster, aunque el turno lo pase un jugador (reglas de Firestore).
+
+## Hito 42 · Ficha de personaje nueva, con el visto bueno del máster
+
+- **Distribución**: franja arriba con PG, CA, iniciativa, velocidad, competencia y dados de golpe; columna fija a la izquierda con características, salvaciones, habilidades, sentidos, idiomas y competencias; pestañas justo debajo (Acciones, Conjuros, Inventario, Rasgos, Historia, Cuaderno, Lo que viene). Las pestañas empiezan a 250 px en lugar de 730 (en el móvil, a 300 en lugar de 1.170, con la pestaña Atributos). La ficha recuerda la última pestaña.
+- **Aquí no se tiran dados**: tirar, gastar espacios, curarse o descansar es cosa de la Partida. La subida de nivel toma el valor fijo de PG del SRD.
+- **Solo el máster edita** (✎ Editar → ✓ Hecho); lo que cambia queda en el registro de la ficha.
+- **El jugador propone**: «✎ Proponer un cambio» abre una copia editable, y «Enviar al máster» manda las diferencias con un motivo (p. ej. «Monedas de oro: 34 → 24 · Equipo: + Lanza»). El máster las aprueba o las rechaza con un motivo; el aviso sale en el menú (Personajes con un número) y en la ficha.
+- **Registro (📜)**: cada cambio aprobado, rechazado, hecho por el máster o por subida de nivel, con quién, cuándo y el motivo.
+- **Subida de nivel guiada que se guarda a medias**: cada paso se guarda en la ficha; «💾 Guardar y salir» y, otro día o en otro dispositivo, «⬆ Continuar la subida». Ya no se cierra al tocar fuera.
+- El cuaderno de notas sigue siendo del jugador, sin aprobación.
+- Las reglas de Firestore lo garantizan en el servidor (hito 43).
+
+## Hito 43 · Reglas de Firestore: el jugador ya no puede cambiar su ficha por su cuenta
+
+`firestore.rules` (hay que publicarlas en la consola de Firebase). En su propia ficha, un jugador solo puede escribir:
+- lo que se gasta jugando: PG actuales y temporales (no los máximos), dados de golpe, salvaciones contra muerte, espacios de conjuro gastados (no los máximos ni la lista de conjuros) e inspiración (gastarla; los humanos la recuperan en el descanso largo);
+- su cuaderno, sus propuestas al máster y la subida de nivel guardada a medias;
+- la subida de nivel concedida por el máster: un nivel cada vez y como mucho hasta el concedido, con PG máximos que suben (hasta 60) y características que suben como mucho 2 en total.
+Además, un jugador ya no puede borrar su ficha (solo el máster).
+La app escribe ahora los cambios de un jugador documento a documento: si el servidor rechaza uno de su ficha, avisa («pídeselo al máster con ✎ Proponer un cambio») y no se pierden sus tiradas ni sus movimientos.
+Comprobado simulando las reglas sobre las escrituras reales de la app (gastar espacios, descansos, curación, daño, salvaciones contra muerte, cuaderno, propuestas, subida guardada y subida completa pasan; monedas, equipo, PG máximos, espacios máximos, conjuros, habilidades, darse inspiración o subir dos niveles se rechazan).
+
+## Hito 44 · Tu turno por fases y despliegue del grupo
+
+**Tu turno, paso a paso** (columna Personaje de la Partida):
+- Cuatro fases: 🦶 Movimiento, ⚡ Acción, ✦ Acción adicional y ↺ Reacción. Cada una dice si la tienes («quedan 6 m», «disponible», «1 ataque más») o ya la gastaste, y dentro muestra solo lo que puedes hacer con ella: tus armas, tus conjuros de ese tiempo de lanzamiento y tus rasgos (p. ej. Acción astuta del pícaro como acción adicional, o el ataque con la otra arma ligera).
+- Lo que no puedes hacer aparece apagado con el motivo: «Ya usaste la acción», «Sin espacios de nivel 2», «Ya lanzaste un conjuro con espacio este turno: solo trucos», «Estás aturdido».
+- Fuera de tu turno solo se abre la Reacción (ataque de oportunidad, Escudo…) y un resumen de lo que podrás hacer.
+- Reglas del SRD que ahora se aplican: **Ataque adicional** (bárbaro, explorador, guerrero, monje y paladín a nivel 5; guerrero 3 y 4 ataques a 11 y 20) con la misma acción Atacar; **un solo conjuro con espacio por turno** (2024); **agarrado** deja la velocidad a 0; la mesa no deja gastar dos veces la acción, la adicional o la reacción.
+- En el móvil, tocar «Personaje» baja hasta el panel (y otra vez sube a la mesa).
+
+**Despliegue** (regla de la mesa: el SRD no regula cómo se coloca el grupo):
+- En Escenas, el máster marca el ⚑ punto de inicio y elige la **zona de despliegue** (0 a 6 casillas alrededor). Se ve en el editor.
+- Al cargar la escena, el grupo aparece en la zona y cada jugador, **por turnos**, arrastra su figura a cualquier casilla libre de la zona según lo que ve, y pulsa «✓ Listo». Fuera de la zona no le deja.
+- El máster ve quién se está colocando, puede pulsar «Listo» por un jugador, terminar el despliegue o iniciar el combate (que lo cierra).
+
+## Hito 45 · Tienda, botín del grupo y cofres
+
+- **Tienda** (ficha → Inventario → 🛒 Tienda): catálogo del SRD 5.2.1 (armas, armaduras, equipo de aventura, herramientas, munición, canalizadores, monturas) con precio y peso. Cesta con + y −, venta a la mitad de precio (SRD), cambio en monedas y peso total. El jugador la envía al máster como propuesta; el máster la aplica al momento. Ajuste de precios por tienda (%) opcional, **regla de campaña**.
+- **Dar a un compañero** (🤝): objetos y monedas; al aprobarlo pasan de una ficha a otra y queda en el registro de las dos.
+- **Botín del grupo** (Personajes → El grupo): lo encontrado y aún sin repartir. El máster añade monedas y objetos (mágico, sintonización, de dónde sale), reparte las monedas a partes iguales (el resto a quien elija) o da un objeto a alguien. El jugador pulsa «Me lo quedo» (propuesta; aviso si ya tiene 3 objetos sintonizados). Lo que nadie coge se queda en el cofre del grupo.
+- **Cofres en la escena**: el máster pone un cofre y escribe qué hay dentro (monedas, objetos del catálogo o inventados, nota). Al abrirlo, el contenido pasa al botín del grupo y se anuncia en las tiradas. Lo abre el máster desde el objeto, o un jugador con su figura junto al cofre («Abrir el cofre» en su panel); el cliente del máster comprueba que sigue al lado.
+- Sin cambios en las reglas de Firestore: el botín vive en el documento de la campaña (lo escribe el máster) y el jugador solo crea propuestas y peticiones.
+
+## Hito 46 · Ataques de oportunidad claros, PNJ por fases y tiempo libre en la ciudad
+
+- **Fuera de tu turno ya no parece que te toque reaccionar.** La caja «Reacción» solo se destaca cuando la mesa te ofrece de verdad un ataque de oportunidad (un enemigo sale de tu alcance). Si no, verás «No es tu turno. Nada que hacer ahora». Un arma preparada deja de apuntar al acabar tu turno y, al tocar a un aliado, solo se mide la distancia (antes decía «fuera de alcance · cobertura total»).
+- **El máster lleva a los PNJ y enemigos por fases**, igual que el jugador: Movimiento, Acción (ataques, Ataque múltiple, acciones del perfil y acciones comunes), Acción adicional, Reacción y Legendarias, con lo que les queda y por qué algo no se puede. Fuera de su turno, solo Reacción y Legendarias. Al empezar el turno de una criatura, el panel pasa solo a la pestaña 👹 PNJ; tocar un enemigo en la mesa (o en la iniciativa) abre su pestaña.
+- **🕰 Tiempo libre** (Partida → Roleplay, con la sesión en curso). Es una herramienta de mesa, **regla de campaña**: no añade mecánicas.
+  - El máster elige los sitios: taberna y mercado de entrada, los lugares que haya dentro de la ciudad y otros de un toque (biblioteca, torre de magos, catacumbas, templo, gremio…) o inventados. Cada sitio tiene lo que ven los jugadores y 🔒 notas solo para el máster.
+  - Cada jugador elige a dónde va su personaje y escribe qué quiere hacer. Ve a dónde van sus compañeros, pero no sus planes: no tenéis que ir juntos.
+  - El máster ve quién va a cada sitio y qué quiere hacer. Con **🤫 Contarle** le cuenta a un solo personaje lo que pasa o lo que descubre: solo lo leen ese jugador y los másteres. Puede marcarlo como ⭐ descubrimiento o contarlo también al grupo en la crónica. Con 🎲 le pide una tirada.
+  - El jugador lo ve en su ficha («🤫 Lo que sabes tú») y lo puede pasar a su cuaderno. Si la mesa muestra otra cosa, un aviso en su ficha le deja elegir igualmente.
+  - Al cerrarlo queda en el **📜 Registro**: quién fue a dónde, qué quería hacer y lo que se le contó.
+- **Reglas de Firestore**: hay que publicarlas otra vez. Se añade la colección `whispers` (la leen solo su destinatario y los másteres) y el jugador puede guardar su elección (`ft`) en su ficha.
+
+## Hito 47 · Visión, luz y enemigos ocultos (reglas del SRD 5.2.1)
+
+- **Visión de los personajes activada por defecto** (👁 en la barra del máster para apagarla). Los jugadores solo ven las casillas y las criaturas que algún personaje en pie alcanza a ver: los muros y las **puertas cerradas tapan la vista** (un rastrillo deja ver), también en diagonal entre dos muros que se tocan. Lo ya explorado queda en penumbra.
+- **Luz según las reglas**: la escena tiene ☀️ luz brillante, ◐ luz tenue u ● oscuridad (barra del máster y editor de escenas; de noche, oscuridad por defecto).
+  - Luz tenue: se ve, en penumbra (desventaja en Sabiduría (Percepción) para ver).
+  - Oscuridad: no se ve (quien intenta ver algo ahí está cegado).
+  - **Visión en la oscuridad**: dentro de su alcance, la luz tenue cuenta como brillante y la oscuridad como tenue.
+  - **Fuentes de luz del SRD**: vela 1,5 + 1,5 m, antorcha 6 + 6 m, lámpara 4,5 + 9 m, linterna sorda 9 + 9 m y el conjuro Luz 6 + 6 m. Las llevan los personajes (🔦 en su ficha) o las criaturas (al editarlas). Las antorchas y velas de la escenografía también iluminan; la hoguera, como una antorcha (regla de campaña).
+  - En su ficha, el jugador ve qué luz hay en su casilla.
+- **Enemigos ocultos**: al añadir criaturas, la casilla «🙈 Ocultas a los jugadores» (marcada por defecto) las pone en la mesa sin que se vean. En la ficha de cada PNJ, 🙈/👁 lo oculta o lo muestra, y «Mostrar ocultas» de la barra las revela todas a la vez. En la iniciativa del máster se marca 🙈 oculto y 👁‍🗨 no lo ven (fuera de la vista de los personajes). Para los jugadores, lo que no ven no sale en la mesa, en la iniciativa ni en la barra de turno.
+- **Reglas de Firestore**: el jugador puede cambiar la luz que lleva su figura (`light`). Hay que publicarlas otra vez.
+
+## Hito 48 · Una niebla sutil
+
+- La vista de los personajes ya no se tapa con bloques negros: es un **velo suave con los bordes difuminados** y un poco de grano, como en Foundry, Owlbear Rodeo o Roll20. Es la misma imagen en el plano 2D y en la mesa 3D, pegada al suelo.
+  - Lo que nunca se ha visto queda negro y, en 3D, sus muros y su escenografía ni se dibujan, para no adivinar el mapa.
+  - Lo explorado que ahora no se ve queda en penumbra azulada.
+  - La luz tenue, apenas un velo.
+  - Las casillas a las que puedes moverte se ven por encima del velo.
+
+## Hito 49 · Nombres y vida que se leen
+
+- **Placas de la mesa 3D**: se dibujan a la resolución exacta con la que se ven (antes se encogían desde una imagen grande y se emborronaban). El nombre es más grande y los PG van centrados dentro de la barra, en letra de palo gruesa con contorno («27 / 33»). En los enemigos, el estado (Ileso, Herido…). Al cambiar el tamaño de la ventana se rehacen nítidas.
+- **Barras de vida en las pestañas Personaje y PNJ**: más altas, con los PG centrados y en cifras del mismo ancho, legibles sobre cualquier color. También la barra de movimiento.
+- **Tira de turnos**: el nombre de quien actúa sale corto («Mirra», «Osric») y en letra normal, no en versalitas cortadas.
+
+## Hito 50 · Alturas en el mapa táctico (SRD 5.2.1)
+
+- **Editor de mapas · ⛰ Altura**: pinta con el pincel (1×1 a 5×5) para **subir** o **bajar** 1,5 m por pasada, **fijar** una altura (de −6 a +12 m) o **allanar**. Mientras la usas, cada casilla enseña su cifra. Sirve para tarimas, riscos, galerías, colinas, fosos y zanjas. Se guarda en la escena, en cada planta y al «Guardar como escena».
+- **Cómo se ve**:
+  - **2D**: lo alto, algo más claro; lo hondo, más oscuro; cada desnivel con su filo de luz arriba y su sombra sobre lo bajo, y una etiqueta discreta por meseta («▲ 3 m», «▼ 3 m»).
+  - **3D**: el suelo sube y baja de verdad, con paredes de roca y un filo claro en lo alto. Las figuras, los objetos, los muros y las luces se ponen a su altura. La niebla de la vista sigue el relieve, y se apunta al suelo de verdad (lo alto del risco).
+- **Reglas**:
+  - **Distancias**: como en la cuadrícula, cada 1,5 m cuenta una casilla en cualquier dirección. Un enemigo 3 m más arriba está a 2 casillas, así que el ataque cuerpo a cuerpo (1,5 m) no le llega; un arco, sí. Vale para el alcance de ataques y conjuros y para los ataques de oportunidad.
+  - **Trepar** (SRD): cada metro de subida o bajada cuesta 1 m más de movimiento (2 m en terreno difícil). No cuesta con velocidad trepando o volando, ni por unas 🪜 Escaleras (un tramo de 1,5 m). El cursor lo dice: «trepando (+3 m) · altura +3 m».
+  - **Vista y cobertura**: el relieve más alto que la línea entre los ojos (1,5 m) y el objetivo tapa la vista; lo que hay encima de un risco no se ve desde abajo. Si tapa parte del objetivo da cobertura media o de tres cuartos, y si lo tapa entero, total. El reparto entre media y tres cuartos es regla de mesa.
+  - **Volar** (SRD): el máster puede poner una criatura en el aire («Vuela a» 1,5–18 m al editarla). Cuenta para distancias y en 2D lleva una etiqueta «↑3».
+- Las caídas siguen como estaban: el abismo hace 1d6 por cada 3 m. Saltar desde un risco lo resuelve el máster.
+
+## Hito 51 · Apuntar como en Baldur's Gate 3 (con las reglas del SRD) y colores de la mesa
+
+- **Eliges arma o conjuro y la mesa enseña a quién**, en 2D y en 3D:
+  - El **alcance** del arma o del conjuro va contado como la cuadrícula y con la altura: contorno continuo para el alcance normal y discontinuo para el largo (con desventaja).
+  - Sobre cada enemigo, una etiqueta con la **probabilidad de impactar** (d20 + ataque contra su CA, con ventaja o desventaja, cobertura, Bendición o Perdición y cansancio), el **daño posible** («4–11»), ▲/▼ si hay ventaja o desventaja, y el porqué al pasar el ratón. Si no llega, «fuera · 12 m» o «🛡 cobertura total».
+  - Los conjuros de salvación enseñan la CD («CD 15 Des»); los trucos, el daño a tu nivel.
+  - **Te acercas y atacas**: si el enemigo está fuera de tu alcance cuerpo a cuerpo pero llegas andando (sin correr), la etiqueta dice «🦶4,5 m». Al tocarlo, tu figura va por el camino más corto, paga el movimiento (y provoca ataques de oportunidad si sale del alcance de alguien) y ataca.
+  - **Plantillas de área**: la Bola de fuego, Manos ardientes, los alientos… siguen al cursor con su forma del SRD (esfera, cilindro, cubo, cono, línea, emanación). Marcan a quién alcanzan y avisan si hay aliados dentro («⚠ 1 aliado»), o «demasiado lejos» si el punto de origen queda fuera de alcance. Al tocar, el jugador lanza el conjuro; al máster se le marcan los objetivos para «Usar».
+  - Un ataque de conjuro a un solo objetivo (Rayo de escarcha, Rayo de fuego…) se lanza al tocar al objetivo.
+  - Abajo, una barra dice qué toca hacer. Se cancela con Esc, con clic derecho o con ✕.
+- **🎨 Colores de la mesa** (botón en la barra de arriba): cada jugador elige los colores del movimiento, correr, el camino, el alcance, el alcance largo, los objetivos y las áreas, y la intensidad. Se guardan en su navegador y los nuevos colores por defecto son más vivos.
+- **% de impacto para los jugadores**: regla de campaña. Está activado (como en BG3) y el máster puede apagarlo en 🎨, porque deja adivinar la CA.

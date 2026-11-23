@@ -5,20 +5,24 @@ import { vexOn } from "./maestria.js";
 import { store } from "./store.js";
 import { publish, roll } from "./dados.js";
 import { uid } from "./store.js";
-import { currentUser } from "./session.js";
+import { currentUser, isDM } from "./session.js";
 import { toast } from "./ui.js";
 import { onTurnStart } from "./criaturas.js";
+import { revives } from "./defensas.js";
 import { charOf, hpOf, order } from "./mesa.js";
 import { TERRAIN, PROPS, isDoor, doorBlocksSight } from "../data/mapas.js";
+import { dist3, reliefBlocks } from "./alturas.js";
 
 const CELL_M = 1.5;
-export const dist = (a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
+/** Distancia en casillas. Con alturas en el mapa, la diferencia de altura cuenta como casillas (core/alturas.js). */
+export const dist = (a, b) => { const g = (store.get() || {}).board; return g && (g.elev || a.alt || b.alt) ? dist3(g, a, b) : Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r)); };
 export const metres = cells => (cells * CELL_M).toLocaleString("es-ES") + " m";
 
 /* ---------- Fases ---------- */
 export const phase = s => (s.board && s.board.combat) || null; // null | "init" | "live"
 export const current = s => s.board && s.board.turn ? s.tokens.find(t => t.id === s.board.turn) : null;
-const alive = (s, t) => { const h = hpOf(s, t); return t.kind === "pc" || !h || h.cur > 0; };
+// Un troll a 0 PG sigue en la iniciativa: si empieza su turno sin regenerarse, muere (Regeneración)
+const alive = (s, t) => { const h = hpOf(s, t); return t.kind === "pc" || !h || h.cur > 0 || revives(t); };
 export const pending = s => s.tokens.filter(t => !t.hidden && (t.init == null || t.init === "") && alive(s, t));
 
 /** 1. Iniciar combate: se borra la iniciativa y los enemigos tiran la suya (en secreto, la ve el máster). */
@@ -32,7 +36,7 @@ function closePending(st) { (st.rolls || []).forEach(r => { if (r.status === "pe
 
 export function beginCombat() {
   const s0 = store.get(), foes = s0.tokens.filter(t => t.kind !== "pc");
-  store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; s.board.combatAt = Date.now(); });
+  store.commit("board", s => { if (s.board.deploy) s.board.deploy.on = false; s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = "init"; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; s.board.combatAt = Date.now(); });
   store.commit("roll", closePending);
   if (!foes.length) return;
   // Todas las criaturas tiran a la vez: una sola tirada (secreta) con un d20 por criatura
@@ -57,6 +61,7 @@ export function startRounds() {
     const o = order(s).filter(t => alive(s, t)); if (!o.length) return;
     s.board.combat = "live"; s.board.round = 1; advanceTo(s, o[0]);
   });
+  turnStarted();
 }
 function advanceTo(s, t) {
   s.board.turn = t.id; s.board.seq = (s.board.seq || 0) + 1;
@@ -67,7 +72,7 @@ function advanceTo(s, t) {
   s.tokens.forEach(k => {
     if (k.conds) k.conds = k.conds.filter(c => !(c.seq != null && (st[c.until || k.id] || 0) > c.seq) && !(c.id === "molestar" && (st[k.id] || 0) > c.vseq && t.id !== k.id));
   });
-  onTurnStart(s, t); // criaturas: recarga (d6) de lo gastado y acciones legendarias de nuevo
+  if (isDM(s)) onTurnStart(s, t); // criaturas: recarga, Regeneración y legendarias (si pasa turno un jugador, lo hace el máster al verlo: main.js)
 }
 /** 3. Terminar el turno: pasa a la siguiente criatura en pie; al dar la vuelta, nueva ronda. */
 export function endTurn() {
@@ -77,7 +82,10 @@ export function endTurn() {
     if (i < 0 || i === o.length - 1) { s.board.round = (s.board.round || 0) + 1; advanceTo(s, o[0]); }
     else advanceTo(s, o[i + 1]);
   });
+  turnStarted();
 }
+// Al empezar un turno: fuego (Ardiendo) y el peligro de la casilla (hielo, lava), con tiradas que confirma el máster
+function turnStarted() { const id = store.get().board && store.get().board.turn; if (id) import("./peligros.js").then(m => m.onTurnStarted(id)); }
 export function stopCombat() {
   import("./experiencia.js").then(m => m.postCombatXP());
   store.commit("board", s => { s.tokens.forEach(t => { t.init = null; t.eco = null; t.conds = (t.conds || []).filter(c => !["esquivando", "destrabado"].includes(c.id)); }); s.board.combat = null; s.board.turn = null; s.board.round = 0; s.board.from = null; s.board.starts = {}; s.board.seq = (s.board.seq || 0) + 1; });
@@ -85,13 +93,30 @@ export function stopCombat() {
 }
 
 /* ---------- Economía de acciones del turno ---------- */
-export function speedOf(s, t) { const c = charOf(s, t), v = +(c ? c.speed : t.speed) || 9; return has(t, "ralentizado") ? Math.max(0, v - 3) : v; }
+export function speedOf(s, t) {
+  const c = charOf(s, t), ex = (t.conds || []).find(x => x.id === "agotamiento");
+  let v = +(c ? c.speed : t.speed) || 9;
+  if (ex) v -= 1.5 * (+ex.lvl || 1); // Cansancio (SRD 2024): −1,5 m por nivel
+  if (has(t, "ralentizado")) v -= 3;
+  return Math.max(0, v);
+}
+/** Ataques por acción Atacar (SRD 5.2.1: Ataque adicional a nivel 5 en bárbaro, explorador, guerrero, monje y paladín;
+ *  el guerrero gana más a nivel 11 y 20). También cuenta si la ficha tiene el rasgo «Ataque adicional». */
+export function attacksPerAction(s, t) {
+  const c = t && t.kind === "pc" ? (s.characters || []).find(x => x.id === t.char) : null; if (!c) return 1;
+  const cls = String(c.cls || ""), L = +c.level || 1, feats = (c.features || []).map(f => String(f.name || "")).join(" | ");
+  let n = 1;
+  if (/Guerrer/.test(cls)) n = L >= 20 ? 4 : L >= 11 ? 3 : L >= 5 ? 2 : 1;
+  else if (/B[aá]rbar|Explorador|Monje|Palad[ií]n/.test(cls) && L >= 5) n = 2;
+  if (/Tres ataques adicionales/i.test(feats)) n = Math.max(n, 4); else if (/Dos ataques adicionales/i.test(feats)) n = Math.max(n, 3); else if (/Ataque adicional/i.test(feats)) n = Math.max(n, 2);
+  return n;
+}
 /** Lo gastado en el turno actual (si el turno ha cambiado, empieza de cero). */
 export function eco(s, t) {
   const b = s.board || {}, e = t.eco || {};
   const fresh = e.seq !== b.seq || b.turn !== t.id;
   const reactUsed = e.react != null && e.react >= ((b.starts || {})[t.id] || 0);
-  return fresh ? { seq: b.seq, mov: 0, act: false, bonus: false, dash: false, react: reactUsed ? e.react : null }
+  return fresh ? { seq: b.seq, mov: 0, act: false, bonus: false, dash: false, atkLeft: 0, slotCast: false, react: reactUsed ? e.react : null }
     : { ...e, react: reactUsed ? e.react : null };
 }
 export const moveBudget = (s, t) => speedOf(s, t) * (eco(s, t).dash ? 2 : 1);
@@ -100,7 +125,11 @@ export function spend(tokenId, what) {
   store.commit("token", s => {
     const t = s.tokens.find(x => x.id === tokenId); if (!t) return;
     const e = eco(s, t);
-    if (what === "react") e.react = s.board.seq; else if (typeof what === "object") e.mov = Math.round((e.mov + what.mov) * 10) / 10; else e[what] = true;
+    if (what === "react") e.react = s.board.seq;
+    // La acción Atacar: el primer ataque la gasta; con Ataque adicional quedan más ataques de la misma acción
+    else if (what && what.attack) { if (!e.act) { e.act = true; e.atkLeft = attacksPerAction(s, t) - 1; } else if (e.atkLeft > 0) e.atkLeft--; }
+    else if (what && what.slotCast) e.slotCast = true;
+    else if (typeof what === "object") e.mov = Math.round((e.mov + what.mov) * 10) / 10; else e[what] = true;
     if (what === "dash") e.act = true;
     t.eco = e;
   });
@@ -157,6 +186,14 @@ export function cover(s, a, b) {
       furn = Math.max(furn, propCover(c, r));
     }
     if (hit) blocked++;
+  }
+  // Relieve (riscos, tarimas): si el borde tapa la parte baja, media; casi todo, tres cuartos; todo, total.
+  // Se mira a tres alturas del objetivo (pies, cintura, cabeza), como se mira a sus cuatro esquinas. Regla de mesa.
+  if (g.elev) {
+    const hidden = [0.3, 0.9, 1.5].filter(h => reliefBlocks(g, a, b, 1.5, h)).length;
+    if (hidden === 3) return { level: "total", bonus: null, txt: "cobertura total: el relieve lo tapa" };
+    if (hidden === 2) blocked = Math.max(blocked, 3);
+    else if (hidden === 1) blocked = Math.max(blocked, 1);
   }
   if (blocked >= 4) return { level: "total", bonus: null, txt: "cobertura total: no se puede elegir como objetivo" };
   if (blocked === 3 || furn === 2) return { level: "3/4", bonus: 5, txt: blocked === 3 ? "cobertura de tres cuartos (+5 CA)" : "tres cuartos por la escenografía (+5 CA)" };

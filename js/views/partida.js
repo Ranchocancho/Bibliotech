@@ -6,6 +6,7 @@ import { loadScene, blankBoard, clearBoard, saveBoardAsScene, addPC, removePC } 
 import { presence } from "../core/presence.js";
 import { loreOf, entry, related, refName, showEntry, clockOf, clockText, advanceClock, setBackdrop } from "../core/lore.js";
 import { renderStage } from "./presentacion.js";
+import { freeDMBlock, bindFreeDM, freeStageHTML, bindFreeStage } from "./tiempolibre.js";
 import { mountTactical } from "./mesa.js";
 import { renderRolls } from "./tiradas.js";
 import { renderSheet } from "./ficha.js";
@@ -15,6 +16,7 @@ import { floorsHTML, bindFloors } from "./plantasui.js";
 import { AMBIENTES } from "../core/sonido.js";
 const LUCES = { dia: "☀️ Día", interior: "🕯 Interior", noche: "🌙 Noche" };
 import { floorName, floorsOf } from "../core/plantas.js";
+import { visionOn, LEVELS, ambientLevel } from "../core/vision.js";
 import { $, $$, esc, toast } from "../core/ui.js";
 import { difficulty, partyOf, HINT } from "../core/encuentro.js";
 import { hereOf, setHere, contextOf, sessionCast, markChange, changesOf, changeText, fieldsOf, badges, VITAL, STANCE, touch } from "../core/contexto.js";
@@ -22,6 +24,7 @@ import { placePath, placeOf, LORE, timeline, tellTimeline } from "../core/lore.j
 const openCard = id => import("./fichalore.js").then(m => m.openLoreCard(id));
 const openSearch = () => import("./fichalore.js").then(m => m.openLoreSearch());
 
+let npcTurnSeen = null;
 let el, closing = false, tac = null, tacEdit = false, panelHidden = false, lastKey = null;
 // Panel del máster: dos modos (Táctica de combate | Roleplay); pestañas Iniciativa | Tiradas en táctica y en la columna del jugador
 let floorsOpen = false, offAim = null;
@@ -42,7 +45,9 @@ export function mount(root) {
   if (offAim) offAim(); offAim = onAim(() => { if (el && !isDM(store.get())) renderSheet($("#pl-sheet", el)); });
   $$("[data-mode]", el).forEach(b => b.onclick = () => { dmMode = b.dataset.mode; tabs(); });
   $$("[data-dtab]", el).forEach(b => b.onclick = () => { dmTab = b.dataset.dtab; tabs(); });
-  $$("[data-ptab]", el).forEach(b => b.onclick = () => { plTab = b.dataset.ptab; tabs(); });
+  // En el móvil el panel queda debajo de la mesa: al tocar una pestaña se baja hasta él (y otra vez arriba si ya se ve)
+  $$("[data-ptab]", el).forEach(b => b.onclick = () => { const same = plTab === b.dataset.ptab; plTab = b.dataset.ptab; tabs();
+    if (matchMedia("(max-width: 900px)").matches) { const pn = $(".plpanel", el), box = $(".partida", el) || el; if (pn) { const vis = pn.getBoundingClientRect().top < innerHeight * 0.6; if (same && vis) box.scrollTo({ top: 0, behavior: "smooth" }); else pn.scrollIntoView({ behavior: "smooth", block: "start" }); } } });
   rollsSeen = (store.get().rolls || []).length;
   root.appendChild(el);
   closing = false; tac = null; lastKey = null;
@@ -100,11 +105,21 @@ function drawStage(force) {
       const s2 = store.get(), t = s2.tokens.find(x => x.id === id);
       if (isDM(s2)) { if (t && t.kind !== "pc") { dmMode = "tac"; dmTab = "npc"; tabs(); } if (floorsOpen) { $("#dmtools", el).innerHTML = toolsBlock(s2); bind(s2); } } } }); }
     else tac.update();
+    // Empieza el turno de un PNJ o enemigo: el máster pasa a su pestaña para llevarlo
+    if (dm && s.board && s.board.combat === "live" && s.board.seq !== npcTurnSeen) { npcTurnSeen = s.board.seq; const cur = s.tokens.find(t => t.id === s.board.turn); if (cur && cur.kind !== "pc" && !(dmMode === "tac" && dmTab === "npc")) { dmMode = "tac"; dmTab = "npc"; tabs(); } }
     return;
   }
   tac = null; st.classList.remove("tac");
   const pi = $("#pl-ini", el); if (pi) pi.innerHTML = "";
   const pa = $("#pl-act", el); if (pa) pa.innerHTML = ""; const dn = $("#dm-npcact", el); if (dn) dn.innerHTML = `<p class="empty" style="padding:6px 2px">Cuando haya mesa táctica, aquí verás lo que puede hacer el PNJ o enemigo que elijas.</p>`;
+  // Tiempo libre: cada jugador elige a dónde va; el máster ve quién va a cada sitio
+  const pf = presentationFor(s);
+  if (pf && pf.type === "freetime") {
+    const fk = "ft" + JSON.stringify([s.freeTime, s.characters.map(c => c.ft), (s.whispers || []).length, dm]);
+    const a = document.activeElement; if (a && st.contains(a) && /INPUT|TEXTAREA/.test(a.tagName)) return;
+    if (!force && fk === lastKey && st.childElementCount) return;
+    lastKey = fk; st.innerHTML = freeStageHTML(s); bindFreeStage(st, () => drawStage(true)); return;
+  }
   const key = JSON.stringify(presentationFor(s)) + JSON.stringify(s.world.places.map(p => [p.map, p.summary, p.items.length]));
   if (!force && key === lastKey && st.childElementCount) return;
   lastKey = key; renderStage(st);
@@ -136,10 +151,10 @@ function draw() {
   wasTac = tacOn;
   if (dm && !panelHidden && !typing(rol)) {
     const open = [...$$("details[open]", rol)].map(d => d.dataset.k);
-    rol.innerHTML = sessionBlock(state) + hereBlock(state) + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
+    rol.innerHTML = sessionBlock(state) + hereBlock(state) + (liveSession(state) ? freeDMBlock(state) : "") + levelBlock(state) + directionBlock(state) + tacticalBlock(state) + showBlock(state);
     open.forEach(k => { const d = $(`details[data-k="${k}"]`, rol); if (d) d.open = true; });
     if (!typing($("#dmtools", el))) $("#dmtools", el).innerHTML = toolsBlock(state);
-    bind(state);
+    bind(state); bindFreeDM(rol);
   }
   drawStage();
   tabs();
@@ -159,7 +174,9 @@ function toolsBlock(state) {
     ${q("qtmon", "👹", "Añadir criaturas")}
     ${q("data-askroll", "🎲", "Pedir una tirada (habilidad, característica o salvación)")}
     ${q("data-lsearch", "🔎", "Buscar en el lore (tecla /)")}
-    ${q("qtfog", "🌫", b.fog ? "Niebla de guerra: activada" : "Niebla de guerra: desactivada", !!b.fog)}
+    ${q("qtfog", "👁", visionOn(b) ? "Visión de los personajes: activada. Los jugadores solo ven lo que sus personajes ven (muros, puertas cerradas y luz). Pulsa para que lo vean todo." : "Visión de los personajes: desactivada (los jugadores ven todo el mapa)", visionOn(b))}
+    <select class="qsel" id="qtlight" title="Luz de la escena (reglas): brillante, tenue (desventaja en Percepción para ver) u oscuridad (no se ve sin visión en la oscuridad ni luz)" aria-label="Nivel de luz">${Object.entries(LEVELS).map(([k, n]) => `<option value="${k}" ${ambientLevel(b) === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+    ${(state.tokens || []).some(t => t.hidden) ? `<button class="qb wide" id="qtreveal" title="Los jugadores podrán verlas (si sus personajes alcanzan a verlas)">🙈 Mostrar ocultas <small>${state.tokens.filter(t => t.hidden).length}</small></button>` : ""}
     <select class="qsel" id="qtluz" title="Luz de la mesa" aria-label="Luz">${Object.entries(LUCES).map(([k, n]) => `<option value="${k}" ${(b.ambient || "interior") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
     <select class="qsel" id="qtsnd" title="Música y sonido ambiente" aria-label="Sonido ambiente">${Object.entries(AMBIENTES).map(([k, n]) => `<option value="${k}" ${(b.sound || "") === k ? "selected" : ""}>🎵 ${n}</option>`).join("")}</select>
     <button class="qb wide" id="qtfloor" aria-pressed="${floorsOpen}" title="Plantas del mapa: torres, sótanos…">🏰 ${esc(floorName(b))}${floorsOf(b).length > 1 ? ` <small>${floorsOf(b).length}</small>` : ""}</button></div>
@@ -302,14 +319,16 @@ function bind(state) {
   on("qtedit", toggleEdit);
   { const L = $("#qtluz", el); if (L) L.onchange = () => store.commit("board", st => { if (st.board) st.board.ambient = L.value; });
     const S2 = $("#qtsnd", el); if (S2) S2.onchange = () => store.commit("board", st => { if (st.board) st.board.sound = S2.value; }); }
-  on("qtfog", () => store.commit("board", st => { if (st.board) st.board.fog = !st.board.fog; }));
+  on("qtfog", () => store.commit("board", st => { if (st.board) st.board.fog = !visionOn(st.board); }));
+  { const ql = $("#qtlight", el); if (ql) ql.onchange = () => store.commit("board", st => { if (st.board) st.board.light = ql.value; }); }
+  on("qtreveal", () => store.commit("token", st => { st.tokens.forEach(t => { if (t.hidden) t.hidden = false; }); }));
   $$("[data-lvlg]", el).forEach(b => b.onclick = () => { const c = store.get().characters.find(x => x.id === b.dataset.lvlg); import("../core/experiencia.js").then(m => m.grantLevel(c.id, !levelGranted(c))); });
   $$("[data-lvlall]", el).forEach(b => b.onclick = () => import("../core/experiencia.js").then(m => store.get().characters.filter(c => canLevelUp(c) && !levelGranted(c)).forEach(c => m.grantLevel(c.id))));
   $$("[data-give]", el).forEach(b => b.onclick = () => import("./tesorosui.js").then(m => m.openGiveDialog()));
   $$("[data-askroll]", el).forEach(b => b.onclick = () => import("./peticiones.js").then(m => m.openAskDialog()));
   on("qtfloor", () => { floorsOpen = !floorsOpen; draw(); });
   { const fbox = $(".dmfloors", el); if (fbox) bindFloors(fbox, tac && tac.selected ? tac.selected() : null, () => { $("#dmtools", el).innerHTML = toolsBlock(store.get()); bind(store.get()); }); }
-  on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
+  on("qtmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n, h) => m.addToBoard(x, n, { hidden: h }) })));
   $$("[data-clock]", el).forEach(b => b.onclick = () => advanceClock(+b.dataset.clock));
   $$("[data-showlore]", el).forEach(b => b.onclick = () => { touch(b.dataset.showlore); showEntry(b.dataset.showlore); });
   $$("[data-lsearch]", el).forEach(b => b.onclick = openSearch);
@@ -321,7 +340,7 @@ function bind(state) {
   on("nobackdrop", () => setBackdrop(null));
   $$("[data-pc]", el).forEach(b => b.onchange = () => b.checked ? addPC(b.dataset.pc) : removePC(b.dataset.pc));
   $$(".pcrow [data-insp]", el).forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const c = store.get().characters.find(x => x.id === b.dataset.insp); if (c) import("../core/inspiracion.js").then(m => m.setInspiration(c.id, !c.inspiration)); });
-  on("tmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n) => m.addToBoard(x, n) })));
+  on("tmon", () => import("./reglas.js").then(m => m.openCreaturePicker({ title: "Añadir criaturas a la mesa", onAdd: (x, n, h) => m.addToBoard(x, n, { hidden: h }) })));
   on("tclear", () => { const b = $("#tclear", el); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "Pulsa otra vez"; return; } tacEdit = false; clearBoard(); });
   on("tsave", () => {
     const b = $("#tsave", el);
